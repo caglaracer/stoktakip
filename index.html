@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stok Takip ve Öngörü Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Pure CSS Temel Tasarım */
+        :root { --primary: #2c3e50; --danger: #e74c3c; --success: #27ae60; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .header-panel { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .kpi-container { display: flex; gap: 15px; margin-bottom: 20px; }
+        .kpi-card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; border-left: 4px solid var(--primary); }
+        .kpi-card h4 { margin: 0 0 10px 0; color: #7f8c8d; font-size: 0.9em; text-transform: uppercase; }
+        .kpi-card .value { font-size: 1.8em; font-weight: bold; color: var(--primary); }
+        .chart-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; width: 100%; box-sizing: border-box; }
+        table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+        th { background-color: var(--primary); color: white; font-weight: 600; }
+        tr:last-child td { border-bottom: none; }
+        .status-yeterli { color: var(--success); font-weight: bold; }
+        .status-kritik { color: var(--danger); font-weight: bold; background-color: rgba(231, 76, 60, 0.1); }
+    </style>
+</head>
+<body>
+
+    <div class="header-panel">
+        <h2>Stok Takip ve Öngörü Merkezi</h2>
+        <div id="filtreAlani">
+            <select><option>2026</option><option>2025</option></select>
+        </div>
+    </div>
+    
+    <div class="kpi-container">
+        <div class="kpi-card">
+            <h4>Toplam Giriş Hacmi</h4>
+            <div class="value" id="kpiGiris">Yükleniyor...</div>
+        </div>
+        <div class="kpi-card">
+            <h4>Toplam Çıkış Hacmi</h4>
+            <div class="value" id="kpiCikis">Yükleniyor...</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: var(--success);">
+            <h4>Güncel Net Stok</h4>
+            <div class="value" id="kpiNet">Yükleniyor...</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: var(--danger);">
+            <h4>Kritik Seviye Altı</h4>
+            <div class="value" id="kpiKritik" style="color: var(--danger);">Yükleniyor...</div>
+        </div>
+    </div>
+
+    <div class="kpi-container">
+        <div class="chart-container" style="flex: 2;">
+            <canvas id="trendChart" height="100"></canvas>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Ürün Kodu</th>
+                <th>Ürün Adı</th>
+                <th>Toplam Giriş</th>
+                <th>Toplam Çıkış</th>
+                <th>Güncel Stok</th>
+                <th>Durum / Eylem</th>
+            </tr>
+        </thead>
+        <tbody id="stokTablosu">
+            <tr><td colspan="6" style="text-align: center;">Veriler Google Sheets'ten çekiliyor...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        // LÜTFEN APPS SCRIPT WEB APP URL'NİZİ BURAYA YAPIŞTIRIN
+        const SCRIPT_URL = "BURAYA_WEB_APP_URL_GELECEK";
+        
+        let globalUrunler = [];
+        let globalHareketler = [];
+
+        async function sistemiBaslat() {
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const data = await response.json();
+                globalUrunler = data.urunler;
+                globalHareketler = data.hareketler;
+                
+                analizVeRender(globalUrunler, globalHareketler);
+                grafikOlustur();
+            } catch (error) {
+                console.error("Veri çekme hatası:", error);
+                document.getElementById('stokTablosu').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Veri bağlantı hatası. URL'yi kontrol edin.</td></tr>`;
+            }
+        }
+
+        function analizVeRender(urunler, hareketler) {
+            let toplamGiris = 0;
+            let toplamCikis = 0;
+            let kritikUrunSayisi = 0;
+            const stokAnalizi = {};
+
+            // 1. Veri Yapısını Hazırla
+            urunler.forEach(u => {
+                stokAnalizi[u.urunKodu] = { 
+                    ad: u.urunAdi, 
+                    giris: 0, 
+                    cikis: 0, 
+                    netStok: 0, 
+                    kritik: Number(u.kritikStok) 
+                };
+            });
+
+            // 2. Hareketleri İstemci Tarafında Dinamik Hesapla
+            hareketler.forEach(h => {
+                let miktar = Number(h.miktar);
+                if(h.islemTuru.toUpperCase() === "GİRİŞ") {
+                    stokAnalizi[h.urunKodu].giris += miktar;
+                    stokAnalizi[h.urunKodu].netStok += miktar;
+                    toplamGiris += miktar;
+                } else if(h.islemTuru.toUpperCase() === "ÇIKIŞ") {
+                    stokAnalizi[h.urunKodu].cikis += miktar;
+                    stokAnalizi[h.urunKodu].netStok -= miktar;
+                    toplamCikis += miktar;
+                }
+            });
+
+            // 3. Tabloyu ve KPI'ları Doldur
+            const tbody = document.getElementById('stokTablosu');
+            tbody.innerHTML = "";
+            
+            for (let kod in stokAnalizi) {
+                let u = stokAnalizi[kod];
+                let isKritik = u.netStok < u.kritik;
+                if (isKritik) kritikUrunSayisi++;
+
+                let rowClass = isKritik ? "status-kritik" : "";
+                let durumText = isKritik ? "Kritik - Sipariş Geç!" : "Yeterli";
+                let durumColorClass = isKritik ? "status-kritik" : "status-yeterli";
+
+                tbody.innerHTML += `
+                    <tr class="${rowClass}">
+                        <td>${kod}</td>
+                        <td>${u.ad}</td>
+                        <td>${u.giris}</td>
+                        <td>${u.cikis}</td>
+                        <td style="font-weight:bold; font-size:1.1em;">${u.netStok}</td>
+                        <td class="${durumColorClass}">${durumText}</td>
+                    </tr>
+                `;
+            }
+
+            document.getElementById('kpiGiris').innerText = toplamGiris;
+            document.getElementById('kpiCikis').innerText = toplamCikis;
+            document.getElementById('kpiNet').innerText = (toplamGiris - toplamCikis);
+            document.getElementById('kpiKritik').innerText = kritikUrunSayisi;
+        }
+
+        function grafikOlustur() {
+            // Örnek Chart.js Kurgusu (Filtrelemelerine göre buradaki verileri dinamik besleyebilirsin)
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz'],
+                    datasets: [
+                        {
+                            label: '2017-2025 Ortalama Çıkış (Tahmini)',
+                            data: [12, 19, 15, 14, 22, 10],
+                            borderColor: '#7f8c8d',
+                            borderDash: [5, 5], // Kesikli çizgi
+                            fill: false,
+                            tension: 0.3
+                        },
+                        {
+                            label: '2026 Güncel Çıkış',
+                            data: [10, 15, 20, 5],
+                            borderColor: '#2c3e50',
+                            borderWidth: 3, // Kalın düz çizgi
+                            fill: false,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // --- AKADEMİK TAHMİNLEME MODELLERİ (Filtreleme ve Analizlerinde Kullanman İçin) ---
+        
+        // Model A: Ağırlıklı Hareketli Ortalama (Son 3 yıla ağırlık, diğerlerine %10)
+        function hesaplaAgirlikliOrtalama(veri_T_eksi1, veri_T_eksi2, veri_T_eksi3, digerGecmisOrtalamasi) {
+            let tahmin = (veri_T_eksi1 * 0.4) + 
+                         (veri_T_eksi2 * 0.3) + 
+                         (veri_T_eksi3 * 0.2) + 
+                         (digerGecmisOrtalamasi * 0.1);
+            return tahmin;
+        }
+
+        // Model B: Mevsimsellik Dağılım Oranı ile Projeksiyon
+        function hesaplaMevsimselProjeksiyon(guncelSatisMiktari, donemKumulatifIndeksi) {
+            // Örn: İlk 5 ay satışları (5 adet), geçmiş yıllarda tüm yılın %40'ı (0.40) ise.
+            let yilSonuTahmini = guncelSatisMiktari / donemKumulatifIndeksi;
+            return yilSonuTahmini;
+        }
+
+        // Uygulamayı tetikle
+        sistemiBaslat();
+    </script>
+</body>
+</html>
