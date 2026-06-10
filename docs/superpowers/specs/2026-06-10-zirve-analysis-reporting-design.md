@@ -198,7 +198,7 @@ No recipients means the analysis sheet is still updated, but email sending is sk
 
 ## Migration
 
-`setupAnalysisSystem` creates or repairs the four required tabs and their headers. Existing old tabs are not deleted automatically, preventing accidental data loss. The documentation identifies `Stok_Hareketleri`, `Acik_Siparisler`, `Gecmis_Satislar`, `Tahminler`, and `Urunler` as legacy tabs that may be archived manually after the new workflow is verified.
+`setupAnalysisSystem` creates or repairs the five required tabs and their headers. Existing old tabs are not deleted automatically, preventing accidental data loss. The documentation identifies `Stok_Hareketleri`, `Acik_Siparisler`, `Gecmis_Satislar`, `Tahminler`, and `Urunler` as legacy tabs that may be archived manually after the new workflow is verified.
 
 ## Out Of Scope
 
@@ -207,4 +207,3 @@ No recipients means the analysis sheet is still updated, but email sending is sk
 - Daily stock history archive.
 - Purchase-order management.
 - Editing Zirve stock from the web interface.
-
