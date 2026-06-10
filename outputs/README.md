@@ -67,9 +67,23 @@ Sistem her gün ayarlanan saat civarında kritik ürünleri e-posta ile bildirir
 ## API davranışı
 
 - `GET?action=dashboard` ve `GET?action=health` yalnızca veri okur.
-- Tahmin hesaplama ve stok hareketi işlemleri `POST` isteği ve geçerli `ACCESS_TOKEN` gerektirir.
+- Tahmin hesaplama, stok hareketi, sipariş oluşturma ve sipariş durumu değiştirme işlemleri `POST` isteği ve geçerli `ACCESS_TOKEN` gerektirir.
 - Genel Bakış ekranını yenilemek `Tahminler` sekmesini değiştirmez.
 - Arayüzde **Planı Hesapla** işlemi çalıştırıldığında sonuçlar `Tahminler` sekmesine kaydedilir.
+
+## Stok geçmişi
+
+**Stok Geçmişi** ekranı `Stok_Hareketleri` sekmesindeki en yeni 100 kaydı gösterir. Başlangıç tarihi, bitiş tarihi, ürün ve işlem türü filtreleri birlikte kullanılabilir.
+
+## Açık siparişler
+
+**Açık Siparişler** ekranından:
+
+- Yeni sipariş oluşturabilirsiniz.
+- Sipariş durumunu `BEKLIYOR`, `YOLDA`, `TESLIM` veya `IPTAL` olarak değiştirebilirsiniz.
+- Bekleyen ve yoldaki siparişler tedarik tahmininde `Yoldaki_Siparis` olarak hesaba katılır.
+
+Bir siparişi `TESLIM` durumuna geçirmek güncel stoğu otomatik artırmaz. Ürün fiziksel olarak teslim alındığında ayrıca **Stok Hareketi > Giriş** kaydı oluşturun. Bu ayrım, yanlışlıkla çift stok girişi yapılmasını önler.
 
 ## Tahmin yöntemleri
 

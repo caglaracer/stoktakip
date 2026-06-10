@@ -6,100 +6,105 @@
   <title>Stok Pusulası</title>
   <style>
     :root {
-      --ink: #17231f;
-      --muted: #66736e;
-      --paper: #f5f3ed;
-      --card: #fffef9;
-      --line: #dedfd8;
-      --green: #16745a;
-      --green-dark: #0f5543;
-      --yellow: #d89716;
-      --red: #c3443d;
-      --shadow: 0 12px 30px rgba(28, 46, 39, .08);
+      --canvas: #f4f4f5;
+      --ink: #18181b;
+      --muted: #71717a;
+      --card: #ffffff;
+      --line: #d4d4d8;
+      --soft: #f4f4f5;
+      --dark: #27272a;
+      --red: #b42318;
+      --shadow: 0 8px 24px rgba(24, 24, 27, .05);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--ink);
-      background:
-        radial-gradient(circle at 90% 2%, rgba(22,116,90,.13), transparent 27rem),
-        var(--paper);
-      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--canvas);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     button, input, select { font: inherit; }
     button { cursor: pointer; }
-    .shell { min-height: 100vh; display: grid; grid-template-columns: 235px 1fr; }
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 220px 1fr; }
     aside {
-      position: sticky; top: 0; height: 100vh; padding: 28px 20px;
-      background: #102d25; color: #eef7f2;
+      position: sticky; top: 0; height: 100vh; padding: 22px 16px;
+      background: #18181b; color: #fafafa;
     }
-    .brand { display: flex; gap: 11px; align-items: center; margin: 0 8px 38px; }
-    .mark { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: #d9ed7c; color: #173329; font-weight: 900; }
+    .brand { display: flex; gap: 10px; align-items: center; margin: 0 7px 28px; }
+    .mark { width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center; background: #fafafa; color: #18181b; font-weight: 900; }
     .brand strong { display: block; font-size: 17px; }
-    .brand small { color: #a9c2b8; }
+    .brand small { color: #a1a1aa; }
     nav button {
-      width: 100%; border: 0; border-radius: 10px; padding: 11px 13px; margin: 3px 0;
-      color: #bcd0c8; background: transparent; text-align: left;
+      width: 100%; border: 0; border-radius: 6px; padding: 9px 11px; margin: 2px 0;
+      color: #d4d4d8; background: transparent; text-align: left;
     }
-    nav button:hover, nav button.active { color: white; background: rgba(255,255,255,.10); }
-    .side-note { position: absolute; left: 28px; right: 28px; bottom: 27px; color: #94afa4; font-size: 12px; }
-    main { padding: 34px clamp(20px, 4vw, 58px) 60px; min-width: 0; }
-    header { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin-bottom: 28px; }
+    nav button:hover, nav button.active { color: white; background: #3f3f46; }
+    .side-note { position: absolute; left: 23px; right: 23px; bottom: 22px; color: #a1a1aa; font-size: 11px; }
+    main { padding: 26px clamp(18px, 3vw, 42px) 48px; min-width: 0; }
+    header { display: flex; justify-content: space-between; gap: 18px; align-items: start; margin-bottom: 20px; }
     h1, h2, h3, p { margin-top: 0; }
-    h1 { font-size: clamp(26px, 4vw, 38px); letter-spacing: -.04em; margin-bottom: 5px; }
-    h2 { font-size: 21px; letter-spacing: -.02em; }
+    h1 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.035em; margin-bottom: 3px; }
+    h2 { font-size: 17px; letter-spacing: -.02em; }
     .sub { color: var(--muted); }
     .actions { display: flex; gap: 9px; flex-wrap: wrap; }
-    .btn { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--card); color: var(--ink); }
-    .btn.primary { border-color: var(--green); background: var(--green); color: white; }
-    .btn.primary:hover { background: var(--green-dark); }
-    .grid { display: grid; gap: 16px; }
-    .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
-    .card { background: rgba(255,254,249,.92); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
-    .stat { padding: 20px; }
-    .stat small { display: block; color: var(--muted); margin-bottom: 9px; }
-    .stat strong { font-size: 29px; letter-spacing: -.03em; }
+    .btn { border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px; background: var(--card); color: var(--ink); }
+    .btn:hover { background: var(--soft); }
+    .btn.primary { border-color: var(--dark); background: var(--dark); color: white; }
+    .btn.primary:hover { background: #09090b; }
+    .btn.danger { color: var(--red); }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .grid { display: grid; gap: 12px; }
+    .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+    .stat { padding: 15px; }
+    .stat small { display: block; color: var(--muted); margin-bottom: 5px; }
+    .stat strong { font-size: 24px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
     .stat .delta { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
     .split { grid-template-columns: minmax(0, 1.6fr) minmax(280px, .75fr); }
-    .panel { padding: 22px; overflow: hidden; }
-    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .panel { padding: 16px; overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
     .panel-head h2 { margin: 0; }
     .field, .filters input, .filters select {
-      width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 10px 11px; background: white; color: var(--ink);
+      width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 9px; background: white; color: var(--ink);
     }
-    .filters { display: grid; grid-template-columns: 1fr 180px; gap: 9px; margin-bottom: 14px; }
+    .filters { display: grid; grid-template-columns: 1fr 180px; gap: 8px; margin-bottom: 10px; }
+    .filters.history { grid-template-columns: 150px 150px minmax(180px,1fr) 160px; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; white-space: nowrap; }
-    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-    td { padding: 13px 12px; border-bottom: 1px solid #ecece6; }
+    th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--line); }
+    td { padding: 9px; border-bottom: 1px solid #e4e4e7; font-variant-numeric: tabular-nums; }
     tr:last-child td { border-bottom: 0; }
     .status { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
     .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-    .normal { color: var(--green); background: #e6f4ed; }
-    .low { color: #9b6700; background: #fff2d3; }
-    .critical { color: var(--red); background: #fbe8e5; }
+    .normal { color: #3f3f46; background: #f4f4f5; }
+    .low { color: #27272a; background: #e4e4e7; }
+    .critical { color: var(--red); background: #fee4e2; }
+    .order-BEKLIYOR, .order-YOLDA, .order-TESLIM, .order-IPTAL { color: #3f3f46; background: #f4f4f5; }
+    .order-IPTAL { color: var(--red); background: #fee4e2; }
     .alert-list { display: grid; gap: 10px; }
-    .alert { border: 1px solid var(--line); border-left: 4px solid var(--red); border-radius: 10px; padding: 12px; }
+    .alert { border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 6px; padding: 10px; }
     .alert strong, .alert small { display: block; }
     .alert small { color: var(--muted); margin-top: 3px; }
     .view { display: none; }
     .view.active { display: block; }
     .forecast-controls { grid-template-columns: repeat(4, 1fr); align-items: end; margin-bottom: 18px; }
     label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
-    .forecast-total { color: var(--green); font-weight: 800; }
-    dialog { width: min(520px, calc(100% - 28px)); border: 0; border-radius: 16px; padding: 0; box-shadow: 0 25px 80px rgba(0,0,0,.25); }
-    dialog::backdrop { background: rgba(11,29,24,.55); }
-    .modal { padding: 24px; }
+    .forecast-total { color: var(--ink); font-weight: 800; }
+    dialog { width: min(520px, calc(100% - 28px)); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: 0 25px 80px rgba(0,0,0,.2); }
+    dialog::backdrop { background: rgba(24,24,27,.55); }
+    .modal { padding: 20px; }
     .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
-    .notice { padding: 11px 13px; border-radius: 10px; background: #eaf3ef; color: var(--green-dark); margin-bottom: 16px; font-size: 13px; }
+    .notice { padding: 9px 11px; border-radius: 6px; background: var(--soft); color: #3f3f46; margin-bottom: 12px; font-size: 12px; }
     .empty { color: var(--muted); text-align: center; padding: 26px; }
-    #toast { position: fixed; right: 22px; bottom: 22px; padding: 12px 16px; border-radius: 10px; background: #102d25; color: white; opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
+    .compact-select { border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; background: white; }
+    #toast { position: fixed; right: 22px; bottom: 22px; padding: 10px 13px; border-radius: 6px; background: #18181b; color: white; opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
     #toast.show { opacity: 1; transform: none; }
     @media (max-width: 980px) {
       .stats { grid-template-columns: 1fr 1fr; }
       .split { grid-template-columns: 1fr; }
       .forecast-controls { grid-template-columns: 1fr 1fr; }
+      .filters.history { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 680px) {
       .shell { display: block; }
@@ -113,6 +118,7 @@
       .actions { margin-top: 16px; }
       .stats, .forecast-controls, .modal-grid { grid-template-columns: 1fr; }
       .filters { grid-template-columns: 1fr; }
+      .filters.history { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -123,6 +129,8 @@
       <nav>
         <button class="active" data-view="dashboard">Genel Bakış</button>
         <button data-view="inventory">Stok Listesi</button>
+        <button data-view="history">Stok Geçmişi</button>
+        <button data-view="orders">Açık Siparişler</button>
         <button data-view="forecast">3 Aylık Tedarik</button>
         <button data-view="settings">Bağlantı Ayarları</button>
       </nav>
@@ -134,6 +142,7 @@
         <div><h1 id="pageTitle">Genel Bakış</h1><p class="sub" id="pageSub">Deponuzun bugünkü durumu ve kritik ürünler.</p></div>
         <div class="actions">
           <button class="btn" id="refreshBtn">Yenile</button>
+          <button class="btn" id="orderBtn">+ Sipariş</button>
           <button class="btn primary" id="movementBtn">+ Stok Hareketi</button>
         </div>
       </header>
@@ -164,6 +173,25 @@
             <select id="statusFilter"><option value="">Tüm durumlar</option><option value="critical">Kritik</option><option value="low">Düşük</option><option value="normal">Normal</option></select>
           </div>
           <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Güncel stok</th><th>Yoldaki</th><th>Tedarik günü</th><th>Durum</th></tr></thead><tbody id="inventoryRows"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="history" class="view">
+        <div class="card panel">
+          <div class="filters history">
+            <input id="historyStart" type="date" aria-label="Başlangıç tarihi">
+            <input id="historyEnd" type="date" aria-label="Bitiş tarihi">
+            <select id="historyProduct"><option value="">Tüm ürünler</option></select>
+            <select id="historyType"><option value="">Tüm işlemler</option><option value="GIRIS">Giriş</option><option value="CIKIS">Çıkış</option><option value="SAYIM">Sayım</option></select>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Ürün</th><th>İşlem</th><th>Miktar</th><th>Önceki</th><th>Yeni</th><th>Açıklama</th><th>Kullanıcı</th></tr></thead><tbody id="historyRows"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="orders" class="view">
+        <div class="card panel">
+          <div class="panel-head"><div><h2>Sipariş kayıtları</h2><small class="sub">Teslim edilen siparişler stoğu otomatik değiştirmez.</small></div><button class="btn primary" id="orderPanelBtn">Yeni Sipariş</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Sipariş</th><th>Tarih</th><th>Ürün</th><th>Miktar</th><th>Beklenen teslim</th><th>Durum</th><th>Açıklama</th></tr></thead><tbody id="ordersRows"></tbody></table></div>
         </div>
       </section>
 
@@ -207,6 +235,20 @@
       <div class="modal-actions"><button class="btn" type="button" id="cancelMovement">Vazgeç</button><button class="btn primary" type="submit">Kaydet</button></div>
     </form>
   </dialog>
+  <dialog id="orderDialog">
+    <form class="modal" id="orderForm">
+      <h2>Yeni sipariş</h2>
+      <div class="modal-grid">
+        <div style="grid-column:1/-1"><label>Ürün</label><select class="field" id="orderProduct" required></select></div>
+        <div><label>Sipariş tarihi</label><input class="field" id="orderDate" type="date" required></div>
+        <div><label>Beklenen teslim</label><input class="field" id="orderDelivery" type="date" required></div>
+        <div><label>Miktar</label><input class="field" id="orderQuantity" type="number" min="0.01" step="0.01" required></div>
+        <div><label>Durum</label><select class="field" id="orderStatus"><option value="BEKLIYOR">Bekliyor</option><option value="YOLDA">Yolda</option></select></div>
+        <div style="grid-column:1/-1"><label>Açıklama</label><input class="field" id="orderNote" placeholder="Tedarikçi veya kısa not"></div>
+      </div>
+      <div class="modal-actions"><button class="btn" type="button" id="cancelOrder">Vazgeç</button><button class="btn primary" id="saveOrder" type="submit">Siparişi Kaydet</button></div>
+    </form>
+  </dialog>
   <div id="toast"></div>
 
   <script>
@@ -225,6 +267,15 @@
         {code:"URN-004", months:[47,50,58], suggestedPurchase:180},
         {code:"URN-005", months:[28,31,35], suggestedPurchase:0}
       ],
+      movements: [
+        {id:"MOV-003",date:"2026-06-10",productCode:"URN-002",type:"CIKIS",quantity:8,previousStock:20,newStock:12,note:"Müşteri sevkiyatı",user:"demo"},
+        {id:"MOV-002",date:"2026-06-09",productCode:"URN-005",type:"GIRIS",quantity:30,previousStock:56,newStock:86,note:"Tedarik girişi",user:"demo"},
+        {id:"MOV-001",date:"2026-06-08",productCode:"URN-004",type:"SAYIM",quantity:7,previousStock:9,newStock:7,note:"Depo sayımı",user:"demo"}
+      ],
+      orders: [
+        {id:"ORD-002",orderDate:"2026-06-09",productCode:"URN-005",quantity:30,expectedDelivery:"2026-06-14",status:"YOLDA",note:"Standart tedarik"},
+        {id:"ORD-001",orderDate:"2026-06-08",productCode:"URN-002",quantity:20,expectedDelivery:"2026-06-13",status:"BEKLIYOR",note:"Acil sipariş"}
+      ],
       summary: {totalProducts:5, criticalCount:2, lowCount:1, purchaseTotal:500}
     };
     const state = { data: demo, apiUrl: localStorage.getItem("stockApiUrl") || "", token: localStorage.getItem("stockAccessToken") || "" };
@@ -235,6 +286,8 @@
     const titles = {
       dashboard:["Genel Bakış","Deponuzun bugünkü durumu ve kritik ürünler."],
       inventory:["Stok Listesi","Tüm ürünlerin güncel stok seviyeleri."],
+      history:["Stok Geçmişi","Son stok giriş, çıkış ve sayım hareketleri."],
+      orders:["Açık Siparişler","Tedarik siparişlerini oluşturun ve durumlarını yönetin."],
       forecast:["3 Aylık Tedarik","Geçmiş satışlara göre satın alma planı."],
       settings:["Bağlantı Ayarları","Google Sheets ve Apps Script bağlantısı."]
     };
@@ -260,7 +313,9 @@
       const urgent = products.filter(p => p.status !== "normal");
       $("alerts").innerHTML = urgent.map(p => `<div class="alert"><strong>${esc(p.name)}</strong><small>${fmt(p.stock)} adet stokta · Kritik eşik ${fmt(p.criticalLevel)}</small></div>`).join("") || `<p class="empty">Kritik uyarı bulunmuyor.</p>`;
       $("movementProduct").innerHTML = products.map(p => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join("");
-      renderInventory(); renderForecasts(forecasts);
+      $("orderProduct").innerHTML = products.map(p => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join("");
+      $("historyProduct").innerHTML = `<option value="">Tüm ürünler</option>` + products.map(p => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join("");
+      renderInventory(); renderHistory(); renderOrders(); renderForecasts(forecasts);
     }
     function emptyRow(cols) { return `<tr><td colspan="${cols}" class="empty">Kayıt bulunamadı.</td></tr>`; }
     function renderInventory() {
@@ -276,12 +331,43 @@
         return d.toLocaleDateString("tr-TR", {month:"short", year:"numeric"});
       });
     }
+    function productMap() { return Object.fromEntries((state.data.products || []).map(p => [p.code,p])); }
+    function renderHistory() {
+      const start = $("historyStart").value;
+      const end = $("historyEnd").value;
+      const product = $("historyProduct").value;
+      const type = $("historyType").value;
+      const products = productMap();
+      const rows = (state.data.movements || []).filter(m =>
+        (!start || m.date >= start) && (!end || m.date <= end) &&
+        (!product || m.productCode === product) && (!type || m.type === type)
+      );
+      $("historyRows").innerHTML = rows.map(m => {
+        const p = products[m.productCode] || {name:m.productCode};
+        return `<tr><td>${esc(m.timestamp || m.date)}</td><td><strong>${esc(p.name)}</strong><br><small class="sub">${esc(m.productCode)}</small></td><td>${esc(m.type)}</td><td>${fmt(m.quantity)}</td><td>${fmt(m.previousStock)}</td><td>${fmt(m.newStock)}</td><td>${esc(m.note || "—")}</td><td>${esc(m.user || "—")}</td></tr>`;
+      }).join("") || emptyRow(8);
+    }
+    function renderOrders() {
+      const products = productMap();
+      $("ordersRows").innerHTML = (state.data.orders || []).map(order => {
+        const p = products[order.productCode] || {name:order.productCode};
+        const options = ["BEKLIYOR","YOLDA","TESLIM","IPTAL"].map(status => `<option value="${status}"${status === order.status ? " selected" : ""}>${status}</option>`).join("");
+        return `<tr><td><strong>${esc(order.id)}</strong></td><td>${esc(order.orderDate)}</td><td><strong>${esc(p.name)}</strong><br><small class="sub">${esc(order.productCode)}</small></td><td>${fmt(order.quantity)}</td><td>${esc(order.expectedDelivery)}</td><td><select class="compact-select order-${esc(order.status)}" data-order-status="${esc(order.id)}">${options}</select></td><td>${esc(order.note || "—")}</td></tr>`;
+      }).join("") || emptyRow(7);
+    }
     function currentMonthInIstanbul(date = new Date()) {
       const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone:"Europe/Istanbul", year:"numeric", month:"2-digit"
       }).formatToParts(date);
       const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
       return `${values.year}-${values.month}`;
+    }
+    function todayInIstanbul(date = new Date()) {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone:"Europe/Istanbul", year:"numeric", month:"2-digit", day:"2-digit"
+      }).formatToParts(date);
+      const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+      return `${values.year}-${values.month}-${values.day}`;
     }
     function renderForecasts(forecasts) {
       monthLabels().forEach((label,i) => $(`m${i+1}`).textContent = label);
@@ -327,12 +413,21 @@
     document.querySelectorAll("[data-go]").forEach(btn => btn.addEventListener("click", () => showView(btn.dataset.go)));
     $("searchInput").addEventListener("input", renderInventory);
     $("statusFilter").addEventListener("change", renderInventory);
+    ["historyStart","historyEnd","historyProduct","historyType"].forEach(id => $(id).addEventListener("change", renderHistory));
     $("startMonth").value = currentMonthInIstanbul();
     $("startMonth").addEventListener("change", () => renderForecasts(state.data.forecasts || []));
     $("calculateBtn").addEventListener("click", calculate);
     $("refreshBtn").addEventListener("click", () => loadData());
     $("movementBtn").addEventListener("click", () => $("movementDialog").showModal());
     $("cancelMovement").addEventListener("click", () => $("movementDialog").close());
+    function openOrderDialog() {
+      $("orderDate").value = todayInIstanbul();
+      if (!$("orderDelivery").value) $("orderDelivery").value = todayInIstanbul();
+      $("orderDialog").showModal();
+    }
+    $("orderBtn").addEventListener("click", openOrderDialog);
+    $("orderPanelBtn").addEventListener("click", openOrderDialog);
+    $("cancelOrder").addEventListener("click", () => $("orderDialog").close());
     $("movementForm").addEventListener("submit", async event => {
       event.preventDefault();
       if (!state.apiUrl) { toast("Hareket kaydetmek için Apps Script bağlantısını kurun."); return; }
@@ -341,6 +436,37 @@
         if (!result.ok) throw new Error(result.error);
         $("movementDialog").close(); event.target.reset(); await loadData(false); toast("Stok hareketi kaydedildi.");
       } catch (error) { toast(`Kayıt hatası: ${error.message}`); }
+    });
+    $("orderForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!state.apiUrl) { toast("Sipariş kaydetmek için Apps Script bağlantısını kurun."); return; }
+      const button = $("saveOrder");
+      button.disabled = true;
+      try {
+        const result = await api("orderCreate", {order:{
+          productCode:$("orderProduct").value, quantity:Number($("orderQuantity").value),
+          orderDate:$("orderDate").value, expectedDelivery:$("orderDelivery").value,
+          status:$("orderStatus").value, note:$("orderNote").value
+        }});
+        if (!result.ok) throw new Error(result.error);
+        $("orderDialog").close(); event.target.reset(); await loadData(false); showView("orders"); toast("Sipariş kaydedildi.");
+      } catch (error) { toast(`Sipariş hatası: ${error.message}`); }
+      finally { button.disabled = false; }
+    });
+    $("ordersRows").addEventListener("change", async event => {
+      const select = event.target.closest("[data-order-status]");
+      if (!select) return;
+      const orderId = select.dataset.orderStatus;
+      const previous = (state.data.orders || []).find(order => order.id === orderId)?.status || "BEKLIYOR";
+      if (!state.apiUrl) { select.value = previous; toast("Durum değiştirmek için Apps Script bağlantısını kurun."); return; }
+      if (select.value === "IPTAL" && !confirm(`${orderId} siparişini iptal etmek istediğinize emin misiniz?`)) { select.value = previous; return; }
+      select.disabled = true;
+      try {
+        const result = await api("orderStatus", {order:{orderId, status:select.value}});
+        if (!result.ok) throw new Error(result.error);
+        await loadData(false); toast("Sipariş durumu güncellendi.");
+      } catch (error) { select.value = previous; toast(`Durum hatası: ${error.message}`); }
+      finally { select.disabled = false; }
     });
     $("apiUrl").value = state.apiUrl; $("accessToken").value = state.token;
     $("saveSettings").addEventListener("click", async () => {

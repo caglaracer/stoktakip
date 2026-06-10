@@ -65,6 +65,12 @@ function route_(action, body, isWrite) {
         case 'movement':
           data = addMovement_(body.movement || {});
           break;
+        case 'orderCreate':
+          data = addOrder_(body.order || {});
+          break;
+        case 'orderStatus':
+          data = updateOrderStatus_(body.order || {});
+          break;
         default:
           throw new Error('Geçersiz yazma işlemi: ' + action);
       }
@@ -98,6 +104,8 @@ function getDashboardData_() {
   return {
     products: enriched,
     forecasts: forecasts.forecasts,
+    movements: readMovements_(),
+    orders: readOrders_(),
     summary: {
       totalProducts: enriched.length,
       criticalCount: enriched.filter(function(p) { return p.status === 'critical'; }).length,
@@ -141,6 +149,77 @@ function addMovement_(movement) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function addOrder_(order) {
+  const validated = validateOrder_(order, readProducts_());
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const id = Utilities.getUuid();
+    getSheet_(CONFIG.SHEETS.ORDERS).appendRow([
+      id,
+      parseIsoDate_(validated.orderDate),
+      validated.productCode,
+      validated.quantity,
+      parseIsoDate_(validated.expectedDelivery),
+      validated.status,
+      validated.note
+    ]);
+    return {
+      orderId: id,
+      productCode: validated.productCode,
+      quantity: validated.quantity,
+      status: validated.status
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateOrderStatus_(request) {
+  const orderId = clean_(request.orderId);
+  const status = clean_(request.status).toUpperCase();
+  if (!orderId) throw new Error('Sipariş kimliği zorunludur.');
+  if (['BEKLIYOR', 'YOLDA', 'TESLIM', 'IPTAL'].indexOf(status) === -1) throw new Error('Geçersiz sipariş durumu.');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sheet = getSheet_(CONFIG.SHEETS.ORDERS);
+    const values = sheet.getDataRange().getValues();
+    const headers = headerMap_(values[0]);
+    const rowIndex = values.findIndex(function(row, index) {
+      return index > 0 && clean_(row[headers.Siparis_ID]) === orderId;
+    });
+    if (rowIndex < 1) throw new Error('Sipariş bulunamadı: ' + orderId);
+    sheet.getRange(rowIndex + 1, headers.Durum + 1).setValue(status);
+    return {orderId: orderId, status: status};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function validateOrder_(order, products) {
+  const productCode = clean_(order.productCode);
+  const quantity = number_(order.quantity);
+  const orderDate = clean_(order.orderDate);
+  const expectedDelivery = clean_(order.expectedDelivery);
+  const status = clean_(order.status || 'BEKLIYOR').toUpperCase();
+  const exists = products.some(function(product) { return product.code === productCode; });
+  if (!exists) throw new Error('Ürün bulunamadı: ' + productCode);
+  if (quantity <= 0) throw new Error('Sipariş miktarı sıfırdan büyük olmalıdır.');
+  if (!isIsoDate_(orderDate) || !isIsoDate_(expectedDelivery)) throw new Error('Sipariş ve teslim tarihleri geçerli olmalıdır.');
+  if (expectedDelivery < orderDate) throw new Error('Beklenen teslim tarihi sipariş tarihinden önce olamaz.');
+  if (['BEKLIYOR', 'YOLDA', 'TESLIM', 'IPTAL'].indexOf(status) === -1) throw new Error('Geçersiz sipariş durumu.');
+  return {
+    productCode: productCode,
+    quantity: quantity,
+    orderDate: orderDate,
+    expectedDelivery: expectedDelivery,
+    status: status,
+    note: clean_(order.note)
+  };
 }
 
 function calculateForecasts_(request) {
@@ -254,6 +333,48 @@ function readIncomingOrders_() {
   return grouped;
 }
 
+function readMovements_() {
+  return rowsAsObjects_(getSheet_(CONFIG.SHEETS.MOVEMENTS)).map(function(row) {
+    const movementDate = normalizeDate_(row.Tarih);
+    return {
+      id: clean_(row.Hareket_ID),
+      date: movementDate ? Utilities.formatDate(movementDate, CONFIG.TIMEZONE, 'yyyy-MM-dd') : '',
+      timestamp: movementDate ? Utilities.formatDate(movementDate, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss') : '',
+      sortTime: movementDate ? movementDate.getTime() : 0,
+      productCode: clean_(row.Urun_Kodu),
+      type: clean_(row.Islem_Turu).toUpperCase(),
+      quantity: number_(row.Miktar),
+      previousStock: number_(row.Onceki_Stok),
+      newStock: number_(row.Yeni_Stok),
+      note: clean_(row.Aciklama),
+      user: clean_(row.Kullanici)
+    };
+  }).sort(function(a, b) {
+    return b.sortTime - a.sortTime;
+  }).slice(0, 100).map(function(movement) {
+    delete movement.sortTime;
+    return movement;
+  });
+}
+
+function readOrders_() {
+  return rowsAsObjects_(getSheet_(CONFIG.SHEETS.ORDERS)).map(function(row) {
+    return {
+      id: clean_(row.Siparis_ID),
+      orderDate: dateToIso_(row.Siparis_Tarihi),
+      productCode: clean_(row.Urun_Kodu),
+      quantity: number_(row.Miktar),
+      expectedDelivery: dateToIso_(row.Beklenen_Teslim),
+      status: clean_(row.Durum).toUpperCase() || 'BEKLIYOR',
+      note: clean_(row.Aciklama)
+    };
+  }).filter(function(order) {
+    return order.id && order.productCode;
+  }).sort(function(a, b) {
+    return String(b.orderDate).localeCompare(String(a.orderDate));
+  });
+}
+
 function writeForecasts_(forecasts, products, incoming, model, start) {
   const sheet = getSheet_(CONFIG.SHEETS.FORECASTS);
   if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
@@ -356,7 +477,7 @@ function ensureHeaders_(sheet, headers) {
 
 function styleSheet_(sheet, width) {
   sheet.setFrozenRows(1);
-  sheet.getRange(1, 1, 1, width).setBackground('#145f4b').setFontColor('#ffffff').setFontWeight('bold');
+  sheet.getRange(1, 1, 1, width).setBackground('#27272a').setFontColor('#ffffff').setFontWeight('bold');
   sheet.autoResizeColumns(1, width);
   if (!sheet.getFilter()) {
     sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 2), width).createFilter();
@@ -384,6 +505,32 @@ function parseMonth_(value) {
   const match = String(value || '').match(/^(\d{4})-(\d{2})$/);
   if (!match) return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   return new Date(Number(match[1]), Number(match[2]) - 1, 1);
+}
+
+function isIsoDate_(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return date.getFullYear() === Number(match[1]) &&
+    date.getMonth() === Number(match[2]) - 1 &&
+    date.getDate() === Number(match[3]);
+}
+
+function parseIsoDate_(value) {
+  const parts = String(value).split('-').map(Number);
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function dateToIso_(value) {
+  const date = normalizeDate_(value);
+  if (!date) return '';
+  return Utilities.formatDate(date, CONFIG.TIMEZONE, 'yyyy-MM-dd');
+}
+
+function normalizeDate_(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return isNaN(date.getTime()) ? null : date;
 }
 
 function roundToPack_(quantity, packSize) {

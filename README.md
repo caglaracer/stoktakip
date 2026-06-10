@@ -1,6 +1,6 @@
 # Stok Pusulasi
 
-Google Sheets ve Google Apps Script tabanli stok takip ve uc aylik tedarik planlama uygulamasi.
+Google Sheets ve Google Apps Script tabanli stok takip, hareket gecmisi, acik siparis ve uc aylik tedarik planlama uygulamasi.
 
 ## Dosyalar
 
@@ -16,3 +16,11 @@ node --test tests\inventory.test.js
 ```
 
 Kurulum icin [ayrintili kilavuzu](outputs/README.md) izleyin.
+
+## Temel Is Akislari
+
+- **Stok Gecmisi:** Tarih, urun ve islem turune gore son 100 hareketi filtreler.
+- **Acik Siparisler:** Yeni siparis olusturur ve `BEKLIYOR`, `YOLDA`, `TESLIM`, `IPTAL` durumlarini yonetir.
+- **Stok Hareketi:** Fiziksel giris, cikis ve sayim islemlerini kaydeder.
+
+Bir siparisi `TESLIM` yapmak stogu otomatik artirmaz. Fiziksel teslim alindiginda ayrica `GIRIS` stok hareketi kaydedilmelidir.
