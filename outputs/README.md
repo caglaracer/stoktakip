@@ -1,104 +1,141 @@
 # Stok Pusulası Kurulumu
 
-Bu klasörde iki ana dosya bulunur:
-
-- `index.html`: GitHub Pages üzerinde çalışacak kullanıcı arayüzü
-- `Code.gs`: Google Sheets veritabanı, API, tahmin ve uyarı otomasyonları
+Bu sistem Zirve’de tutulan stokları değiştirmez. Zirve’den alınan verileri Google Sheets üzerinde analiz eder, kritik ürünleri ve üç aylık alım önerilerini gösterir.
 
 ## 1. Apps Script kurulumu
 
-1. Google Sheets dosyanızı açın.
+1. Kullanacağınız Google Sheets dosyasını açın.
 2. **Uzantılar > Apps Script** menüsüne girin.
 3. `Code.gs` içeriğini Apps Script editörüne yapıştırın.
-4. `setupInventorySystem` fonksiyonunu bir kez çalıştırın ve izinleri onaylayın.
-5. `setAccessToken` fonksiyonunu çalıştırın.
-6. **Yürütme günlüğünde** gösterilen `ACCESS_TOKEN` değerini saklayın.
+4. Kodun başındaki `SPREADSHEET_ID` değerini kendi Google Sheets adresinizdeki kimlikle değiştirin.
+5. `setupAnalysisSystem` fonksiyonunu bir kez çalıştırıp izinleri onaylayın.
 
-Kurulum aşağıdaki sekmeleri otomatik oluşturur:
+Kurulum şu sekmeleri oluşturur:
+
+- `Guncel_Stok`
+- `Aylik_Satislar`
+- `Urun_Ayarlari`
+- `Analiz`
+- `Ayarlar`
+
+## 2. Günlük Zirve stok aktarımı
+
+Her gün:
+
+1. Zirve’den güncel stok listesini Excel veya CSV olarak dışa aktarın.
+2. `Guncel_Stok` sekmesindeki başlık satırını koruyun.
+3. İkinci satırdan itibaren eski verileri tamamen silin.
+4. Zirve’den aldığınız güncel verileri yapıştırın.
+5. Her ürün satırında `Veri_Tarihi` alanını `YYYY-AA-GG` biçiminde doldurun.
+
+Gerekli sütunlar:
+
+| Urun_Kodu | Urun_Adi | Kategori | Birim | Guncel_Stok | Veri_Tarihi |
+|---|---|---|---|---:|---|
+| URN-001 | Örnek Ürün | Ana Grup | Adet | 125 | 2026-06-11 |
+
+`Urun_Kodu` Zirve ve diğer sekmeler arasında değişmeyen eşleştirme alanıdır.
+
+## 3. Aylık satış geçmişi
+
+`Aylik_Satislar` sekmesine her ürünün aylık toplam satışını girin:
+
+| Yil | Ay | Urun_Kodu | Satis_Miktari |
+|---:|---:|---|---:|
+| 2026 | 4 | URN-001 | 120 |
+| 2026 | 5 | URN-001 | 145 |
+
+- `Ay` değeri `1-12` arasında olmalıdır.
+- Aynı ürün, yıl ve ay için birden fazla satır varsa sistem miktarları toplar.
+- Tahmin için mümkünse son 12 ayı girin; daha az veri varsa mevcut aylar kullanılır.
+
+## 4. Ürün ayarları
+
+`Urun_Ayarlari` sekmesinde her ürün için:
+
+| Urun_Kodu | Tedarik_Suresi_Gun | Paket_Miktari | Aktif |
+|---|---:|---:|---|
+| URN-001 | 30 | 12 | EVET |
+
+- `Tedarik_Suresi_Gun`: Siparişten teslimata ortalama gün
+- `Paket_Miktari`: Alım önerisinin yuvarlanacağı koli/paket adedi
+- `Aktif`: `EVET` veya `HAYIR`
+
+Ürün ayarı bulunmazsa sistem geçici olarak `30` gün ve paket miktarı `1` kullanır ve panelde uyarı gösterir.
+
+## 5. E-posta ayarları
+
+`Ayarlar` sekmesinde:
+
+- `UYARI_EPOSTALARI`: Bir veya daha fazla adresi virgülle ayırın.
+- `UYARI_SAATI`: `HH:mm` biçiminde günlük gönderim saati.
+- `VARSAYILAN_MODEL`: `weighted`
+- `TAHMIN_AY_SAYISI`: `3`
+
+Örnek:
+
+```text
+UYARI_EPOSTALARI = satin-alma@example.com, yonetim@example.com
+UYARI_SAATI = 08:30
+```
+
+Ardından Apps Script’te `createDailyAnalysisTrigger` fonksiyonunu bir kez çalıştırın. Saat değiştirildiğinde fonksiyonu yeniden çalıştırın.
+
+İlk e-postayı kontrol etmek için `runDailyAnalysisAndEmail` fonksiyonunu elle çalıştırabilirsiniz.
+
+Günlük işlem:
+
+1. Güncel analiz hesaplanır.
+2. `Analiz` sekmesi son sonuçlarla yenilenir.
+3. Kritik ürün olmasa bile günlük özet gönderilir.
+
+## 6. Web uygulaması ve GitHub Pages
+
+1. Apps Script’te **Dağıt > Yeni dağıtım > Web uygulaması** seçin.
+2. **Şu kullanıcı olarak yürüt:** Ben.
+3. **Erişimi olanlar:** Herkes.
+4. Sonu `/exec` ile biten adresi alın.
+5. GitHub Pages panelinde **Veri ve Bağlantı** ekranına bu adresi girin.
+
+Panel yalnızca `GET?action=dashboard` ile veri okur. Erişim anahtarı veya yazma işlemi yoktur.
+
+## 7. Veri güncelliği
+
+Panel:
+
+- `Veri_Tarihi` boşsa,
+- Ürünlerde farklı tarihler varsa,
+- En güncel tarih İstanbul takvimine göre bir günden eskiyse
+
+uyarı gösterir.
+
+## 8. Hesaplama yöntemi
+
+```text
+Güvenlik stoğu =
+1.65 × aylık satış standart sapması × karekök(tedarik süresi / 30)
+```
+
+```text
+Kritik eşik =
+aylık tahmin × (tedarik süresi / 30) + güvenlik stoğu
+```
+
+```text
+Önerilen alım =
+üç aylık tahmin + güvenlik stoğu - güncel stok
+```
+
+Negatif öneriler `0` yapılır. Pozitif sonuçlar `Paket_Miktari` katına yukarı yuvarlanır.
+
+## 9. Eski sekmeler
+
+Önceki sürümden kalan şu sekmeler yeni sistem tarafından kullanılmaz:
 
 - `Urunler`
 - `Stok_Hareketleri`
 - `Gecmis_Satislar`
 - `Acik_Siparisler`
 - `Tahminler`
-- `Ayarlar`
 
-## 2. Veri girişi
-
-Önce `Urunler` sekmesine ürünleri ekleyin. `Urun_Kodu` benzersiz olmalıdır.
-
-Geçmiş aylık satışları `Gecmis_Satislar` sekmesine şu şekilde girin:
-
-| Yil | Ay | Urun_Kodu | Satis_Miktari |
-|---:|---:|---|---:|
-| 2025 | 1 | URN-001 | 120 |
-| 2025 | 2 | URN-001 | 98 |
-
-`Ay` alanı 1-12 arasında olmalıdır. Satışları stok hareketlerine eklemeyin; bu veriler yalnızca tahmin için kullanılır.
-
-## 3. Web uygulaması yayını
-
-1. Apps Script'te **Dağıt > Yeni dağıtım** seçin.
-2. Tür olarak **Web uygulaması** seçin.
-3. **Şu kullanıcı olarak yürüt:** Ben.
-4. **Erişimi olanlar:** Herkes.
-5. Dağıtın ve sonu `/exec` ile biten URL'yi alın.
-
-Kod değiştikçe **Dağıtımları yönet > Düzenle > Yeni sürüm** ile dağıtımı güncelleyin.
-
-## 4. GitHub Pages
-
-1. `index.html` dosyasını GitHub deponuzun kök dizinine yükleyin.
-2. Depoda **Settings > Pages** bölümüne girin.
-3. Kaynak olarak ana dalı ve `/root` klasörünü seçin.
-4. Yayınlanan sayfada **Bağlantı Ayarları** ekranını açın.
-5. Apps Script `/exec` URL'sini ve `ACCESS_TOKEN` değerini girin.
-
-Bağlantı kurulana kadar arayüz örnek verilerle çalışır.
-
-## 5. Günlük e-posta uyarısı
-
-1. `Ayarlar` sekmesinde `UYARI_EPOSTASI` değerini doldurun.
-2. `UYARI_SAATI` değerini `HH:mm` biçiminde ayarlayın. Geçersiz değerler için `09:00` kullanılır.
-3. Apps Script'te `createDailyCriticalStockTrigger` fonksiyonunu bir kez çalıştırın.
-
-Sistem her gün ayarlanan saat civarında kritik ürünleri e-posta ile bildirir. Apps Script zaman tetikleyicileri belirtilen dakikanın yaklaşık 15 dakika çevresinde çalışabilir. `UYARI_SAATI` değiştirildiğinde tetikleyiciyi güncellemek için `createDailyCriticalStockTrigger` fonksiyonunu yeniden çalıştırın.
-
-## API davranışı
-
-- `GET?action=dashboard` ve `GET?action=health` yalnızca veri okur.
-- Tahmin hesaplama, stok hareketi, sipariş oluşturma ve sipariş durumu değiştirme işlemleri `POST` isteği ve geçerli `ACCESS_TOKEN` gerektirir.
-- Genel Bakış ekranını yenilemek `Tahminler` sekmesini değiştirmez.
-- Arayüzde **Planı Hesapla** işlemi çalıştırıldığında sonuçlar `Tahminler` sekmesine kaydedilir.
-
-## Stok geçmişi
-
-**Stok Geçmişi** ekranı `Stok_Hareketleri` sekmesindeki en yeni 100 kaydı gösterir. Başlangıç tarihi, bitiş tarihi, ürün ve işlem türü filtreleri birlikte kullanılabilir.
-
-## Açık siparişler
-
-**Açık Siparişler** ekranından:
-
-- Yeni sipariş oluşturabilirsiniz.
-- Sipariş durumunu `BEKLIYOR`, `YOLDA`, `TESLIM` veya `IPTAL` olarak değiştirebilirsiniz.
-- Bekleyen ve yoldaki siparişler tedarik tahmininde `Yoldaki_Siparis` olarak hesaba katılır.
-
-Bir siparişi `TESLIM` durumuna geçirmek güncel stoğu otomatik artırmaz. Ürün fiziksel olarak teslim alındığında ayrıca **Stok Hareketi > Giriş** kaydı oluşturun. Bu ayrım, yanlışlıkla çift stok girişi yapılmasını önler.
-
-## Tahmin yöntemleri
-
-- `weighted`: Son 12 aya, yakın dönemlere daha yüksek ağırlık verir.
-- `seasonal`: Hedef ayın önceki yıllardaki satışlarını kullanır.
-- `hybrid`: Mevsimsel tahmine `%65`, son dönem ağırlıklı ortalamasına `%35` ağırlık verir.
-
-Üç aylık öneri şu mantıkla hesaplanır:
-
-```text
-3 aylık tahmin + güvenlik stoğu - güncel stok - yoldaki sipariş
-```
-
-Sonuç `Paket_Miktari` değerinin üst katına yuvarlanır.
-
-## Güvenlik notu
-
-GitHub Pages istemci tarafında çalıştığından erişim anahtarı tarayıcıda saklanır ve tam anlamıyla gizli kabul edilemez. Bu yapı küçük ekip ve operasyonel stok verisi için pratiktir; hassas ticari veriler veya çok kullanıcılı yetkilendirme gerekiyorsa kimlik doğrulamalı bir ara sunucu kullanılmalıdır.
+Yeni paneli ve günlük e-postayı doğrulamadan bu sekmeleri silmeyin. Doğrulama sonrasında isterseniz arşivleyebilirsiniz.

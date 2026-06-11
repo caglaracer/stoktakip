@@ -5,11 +5,17 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
-const codeSource = fs.readFileSync(path.join(root, 'outputs', 'Code.gs'), 'utf8');
-const htmlSource = fs.readFileSync(path.join(root, 'outputs', 'index.html'), 'utf8');
-const publishedHtmlSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+
+function sources() {
+  return {
+    code: fs.readFileSync(path.join(root, 'outputs', 'Code.gs'), 'utf8'),
+    html: fs.readFileSync(path.join(root, 'index.html'), 'utf8'),
+    outputHtml: fs.readFileSync(path.join(root, 'outputs', 'index.html'), 'utf8')
+  };
+}
 
 function loadCode(overrides = {}) {
+  const {code} = sources();
   const context = {
     console,
     Date,
@@ -18,7 +24,9 @@ function loadCode(overrides = {}) {
     Number,
     Object,
     String,
+    RegExp,
     isFinite,
+    isNaN,
     ContentService: {
       MimeType: {JSON: 'application/json'},
       createTextOutput(text) {
@@ -32,214 +40,122 @@ function loadCode(overrides = {}) {
     ...overrides
   };
   vm.createContext(context);
-  vm.runInContext(codeSource, context, {filename: 'Code.gs'});
+  vm.runInContext(code, context, {filename: 'Code.gs'});
   return context;
 }
 
-test('GET forecast is rejected because it can persist data', () => {
+test('weighted demand gives recent months more influence', () => {
   const app = loadCode();
-  app.calculateForecasts_ = () => ({forecasts: [], purchaseTotal: 0});
-
-  const result = app.route_('forecast', {}, false);
-
-  assert.equal(result.ok, false);
-  assert.match(result.error, /Geçersiz|izin|desteklenmiyor/i);
+  const value = app.weightedAverage_([
+    {quantity: 100},
+    {quantity: 80},
+    {quantity: 60}
+  ]);
+  assert.equal(Math.round(value), 83);
 });
 
-test('dashboard forecast calculation is explicitly non-persistent', () => {
-  const app = loadCode({
-    Utilities: {
-      formatDate() {
-        return '2026-06';
-      }
-    }
-  });
-  let request;
-  app.readProducts_ = () => [];
-  app.readMovements_ = () => [];
-  app.readOrders_ = () => [];
-  app.enrichProducts_ = () => [];
-  app.getSetting_ = () => 'hybrid';
-  app.calculateForecasts_ = value => {
-    request = value;
-    return {forecasts: [], purchaseTotal: 0};
-  };
-
-  app.getDashboardData_();
-
-  assert.equal(request.persist, false);
-});
-
-test('dashboard includes normalized movements and orders', () => {
-  const app = loadCode({
-    Utilities: {
-      formatDate() {
-        return '2026-06';
-      }
-    }
-  });
-  app.readProducts_ = () => [];
-  app.enrichProducts_ = () => [];
-  app.getSetting_ = () => 'hybrid';
-  app.calculateForecasts_ = () => ({forecasts: [], purchaseTotal: 0});
-  app.readMovements_ = () => [{id: 'MOV-1'}];
-  app.readOrders_ = () => [{id: 'ORD-1'}];
-
-  const result = app.getDashboardData_();
-
-  assert.deepEqual(Array.from(result.movements, row => row.id), ['MOV-1']);
-  assert.deepEqual(Array.from(result.orders, row => row.id), ['ORD-1']);
-});
-
-test('authenticated POST forecast requests persistence', () => {
+test('population deviation and safety stock use demand variability', () => {
   const app = loadCode();
-  let request;
-  app.verifyToken_ = () => {};
-  app.calculateForecasts_ = value => {
-    request = value;
-    return {forecasts: [], purchaseTotal: 0};
-  };
-
-  const result = app.route_('forecast', {token: 'valid'}, true);
-
-  assert.equal(result.ok, true);
-  assert.equal(request.persist, true);
+  assert.ok(Math.abs(app.populationStdDev_([10, 20, 30]) - 8.1649658) < 0.0001);
+  assert.equal(app.calculateSafetyStock_([10, 20, 30], 30), 14);
 });
 
-test('authenticated POST orderCreate routes the order payload', () => {
+test('product analysis calculates threshold, status, and pack-rounded purchase', () => {
   const app = loadCode();
-  let received;
-  app.verifyToken_ = () => {};
-  app.addOrder_ = order => {
-    received = order;
-    return {id: 'ORD-1'};
-  };
-
-  const result = app.route_('orderCreate', {
-    token: 'valid',
-    order: {productCode: 'URN-001', quantity: 12}
-  }, true);
-
-  assert.equal(result.ok, true);
-  assert.equal(received.productCode, 'URN-001');
-  assert.equal(received.quantity, 12);
-});
-
-test('order validation requires known product, positive quantity, dates, and valid status', () => {
-  const app = loadCode();
-  const products = [{code: 'URN-001'}];
-
-  assert.throws(() => app.validateOrder_({
-    productCode: 'UNKNOWN', quantity: 2, orderDate: '2026-06-10',
-    expectedDelivery: '2026-06-15', status: 'BEKLIYOR'
-  }, products), /bulunamadı/i);
-  assert.throws(() => app.validateOrder_({
-    productCode: 'URN-001', quantity: 0, orderDate: '2026-06-10',
-    expectedDelivery: '2026-06-15', status: 'BEKLIYOR'
-  }, products), /sıfırdan büyük/i);
-  assert.throws(() => app.validateOrder_({
-    productCode: 'URN-001', quantity: 2, orderDate: 'bad-date',
-    expectedDelivery: '2026-06-15', status: 'BEKLIYOR'
-  }, products), /tarih/i);
-  assert.throws(() => app.validateOrder_({
-    productCode: 'URN-001', quantity: 2, orderDate: '2026-06-10',
-    expectedDelivery: '2026-06-15', status: 'UNKNOWN'
-  }, products), /durum/i);
-  assert.throws(() => app.validateOrder_({
-    productCode: 'URN-001', quantity: 2, orderDate: '2026-06-10',
-    expectedDelivery: '2026-06-09', status: 'BEKLIYOR'
-  }, products), /teslim tarihi/i);
-
-  const valid = app.validateOrder_({
-    productCode: ' URN-001 ', quantity: '12', orderDate: '2026-06-10',
-    expectedDelivery: '2026-06-15', status: 'yolda', note: ' test '
-  }, products);
-  assert.deepEqual(
-    {
-      productCode: valid.productCode,
-      quantity: valid.quantity,
-      orderDate: valid.orderDate,
-      expectedDelivery: valid.expectedDelivery,
-      status: valid.status,
-      note: valid.note
-    },
-    {
-      productCode: 'URN-001',
-      quantity: 12,
-      orderDate: '2026-06-10',
-      expectedDelivery: '2026-06-15',
-      status: 'YOLDA',
-      note: 'test'
-    }
-  );
-});
-
-test('movement history preserves time and returns newest records first', () => {
-  const rows = [
-    {
-      Hareket_ID: 'MOV-1', Tarih: new Date('2026-06-10T08:00:00Z'), Urun_Kodu: 'URN-001',
-      Islem_Turu: 'GIRIS', Miktar: 2, Onceki_Stok: 3, Yeni_Stok: 5, Aciklama: '', Kullanici: 'a'
-    },
-    {
-      Hareket_ID: 'MOV-2', Tarih: new Date('2026-06-10T12:00:00Z'), Urun_Kodu: 'URN-001',
-      Islem_Turu: 'CIKIS', Miktar: 1, Onceki_Stok: 5, Yeni_Stok: 4, Aciklama: '', Kullanici: 'b'
-    }
+  const stock = {code: 'URN-001', name: 'Test', stock: 50, dataDate: '2026-06-11'};
+  const history = [
+    {year: 2026, month: 5, quantity: 100, date: new Date(2026, 4, 1)},
+    {year: 2026, month: 4, quantity: 80, date: new Date(2026, 3, 1)},
+    {year: 2026, month: 3, quantity: 60, date: new Date(2026, 2, 1)}
   ];
+
+  const result = app.analyzeProduct_(stock, history, {
+    leadTime: 30,
+    packSize: 12,
+    active: true,
+    missing: false
+  }, {model: 'weighted', startMonth: '2026-06'});
+
+  assert.equal(result.monthlyDemand, 83);
+  assert.equal(result.safetyStock, 27);
+  assert.equal(result.criticalLevel, 110);
+  assert.equal(result.status, 'critical');
+  assert.deepEqual(Array.from(result.months), [83, 83, 83]);
+  assert.equal(result.suggestedPurchase, 228);
+});
+
+test('product without sales history is marked insufficient', () => {
+  const app = loadCode();
+  const result = app.analyzeProduct_(
+    {code: 'URN-002', name: 'Yeni', stock: 20, dataDate: '2026-06-11'},
+    [],
+    {leadTime: 20, packSize: 1, active: true, missing: false},
+    {model: 'weighted', startMonth: '2026-06'}
+  );
+
+  assert.equal(result.status, 'veri_yetersiz');
+  assert.equal(result.monthlyDemand, 0);
+  assert.equal(result.suggestedPurchase, 0);
+});
+
+test('status thresholds distinguish low and normal stock', () => {
+  const app = loadCode();
+  assert.equal(app.stockStatus_(100, 100, true), 'critical');
+  assert.equal(app.stockStatus_(120, 100, true), 'low');
+  assert.equal(app.stockStatus_(126, 100, true), 'normal');
+  assert.equal(app.stockStatus_(100, 100, false), 'veri_yetersiz');
+});
+
+test('monthly sales reader aggregates duplicate product-month rows', () => {
+  const rows = [
+    {Yil: 2026, Ay: 5, Urun_Kodu: 'URN-001', Satis_Miktari: 40},
+    {Yil: 2026, Ay: 5, Urun_Kodu: 'URN-001', Satis_Miktari: 60},
+    {Yil: 2026, Ay: 4, Urun_Kodu: 'URN-001', Satis_Miktari: 30},
+    {Yil: 2026, Ay: 13, Urun_Kodu: 'URN-001', Satis_Miktari: 999}
+  ];
+  const app = loadCode();
+  app.getSheet_ = () => ({});
+  app.rowsAsObjects_ = () => rows;
+
+  const grouped = app.readMonthlySales_();
+
+  assert.equal(grouped['URN-001'].length, 2);
+  assert.equal(grouped['URN-001'][1].quantity, 100);
+  assert.equal(grouped['URN-001'][0].quantity, 30);
+});
+
+test('dashboard route remains read-only', () => {
+  const app = loadCode();
+  app.getDashboardData_ = () => ({products: []});
+
+  assert.equal(app.route_('dashboard').ok, true);
+  assert.equal(app.route_('forecast').ok, false);
+  assert.equal(typeof app.doPost, 'undefined');
+});
+
+test('freshness detects stale, missing, and inconsistent dates', () => {
   const app = loadCode({
     Utilities: {
       formatDate(date, timezone, pattern) {
         assert.equal(timezone, 'Europe/Istanbul');
-        if (pattern === 'yyyy-MM-dd') return date.toISOString().slice(0, 10);
-        if (pattern === 'yyyy-MM-dd HH:mm:ss') return date.toISOString().replace('T', ' ').slice(0, 19);
-        throw new Error(`Unexpected pattern: ${pattern}`);
+        assert.equal(pattern, 'yyyy-MM-dd');
+        return date.toISOString().slice(0, 10);
       }
     }
   });
-  app.getSheet_ = () => ({});
-  app.rowsAsObjects_ = () => rows;
+  const now = new Date('2026-06-11T09:00:00Z');
 
-  const result = app.readMovements_();
-
-  assert.deepEqual(Array.from(result, row => row.id), ['MOV-2', 'MOV-1']);
-  assert.equal(result[0].date, '2026-06-10');
-  assert.equal(result[0].timestamp, '2026-06-10 12:00:00');
-});
-
-test('order status update changes only the matching order row', () => {
-  const values = [
-    ['Siparis_ID', 'Siparis_Tarihi', 'Urun_Kodu', 'Miktar', 'Beklenen_Teslim', 'Durum', 'Aciklama'],
-    ['ORD-1', new Date('2026-06-01'), 'URN-001', 10, new Date('2026-06-10'), 'BEKLIYOR', 'A'],
-    ['ORD-2', new Date('2026-06-02'), 'URN-002', 20, new Date('2026-06-11'), 'YOLDA', 'B']
-  ];
-  const writes = [];
-  const sheet = {
-    getDataRange() {
-      return {getValues: () => values};
-    },
-    getRange(row, column) {
-      return {
-        setValue(value) {
-          writes.push({row, column, value});
-        }
-      };
-    }
-  };
-  const lock = {waitLock() {}, releaseLock() {}};
-  const app = loadCode({
-    LockService: {getScriptLock: () => lock}
-  });
-  app.getSheet_ = () => sheet;
-
-  const result = app.updateOrderStatus_({orderId: 'ORD-2', status: 'TESLIM'});
-
-  assert.deepEqual(writes, [{row: 3, column: 6, value: 'TESLIM'}]);
-  assert.equal(result.orderId, 'ORD-2');
-  assert.equal(result.status, 'TESLIM');
+  assert.equal(app.calculateFreshness_([{dataDate: ''}], now).missing, true);
+  assert.equal(app.calculateFreshness_([
+    {dataDate: '2026-06-10'},
+    {dataDate: '2026-06-09'}
+  ], now).inconsistent, true);
+  assert.equal(app.calculateFreshness_([{dataDate: '2026-06-09'}], now).stale, true);
+  assert.equal(app.calculateFreshness_([{dataDate: '2026-06-10'}], now).stale, false);
 });
 
 test('alert time parser accepts HH:mm and falls back to 09:00', () => {
   const app = loadCode();
-
   assert.deepEqual(
     {hour: app.parseAlertTime_('14:35').hour, minute: app.parseAlertTime_('14:35').minute},
     {hour: 14, minute: 35}
@@ -250,83 +166,159 @@ test('alert time parser accepts HH:mm and falls back to 09:00', () => {
   );
 });
 
-test('daily trigger uses configured hour and minute', () => {
-  const scheduled = {};
-  const builder = {
-    timeBased() {
-      return this;
-    },
-    everyDays(days) {
-      scheduled.days = days;
-      return this;
-    },
-    atHour(hour) {
-      scheduled.hour = hour;
-      return this;
-    },
-    nearMinute(minute) {
-      scheduled.minute = minute;
-      return this;
-    },
-    inTimezone(timezone) {
-      scheduled.timezone = timezone;
-      return this;
-    },
-    create() {
-      scheduled.created = true;
-      return this;
+test('analysis writer replaces rows and writes all fourteen columns', () => {
+  const calls = [];
+  const sheet = {
+    getLastRow: () => 4,
+    getLastColumn: () => 14,
+    getRange(row, column, rows, columns) {
+      return {
+        clearContent() {
+          calls.push({type: 'clear', row, column, rows, columns});
+        },
+        setValues(values) {
+          calls.push({type: 'write', row, column, rows, columns, values});
+        }
+      };
     }
+  };
+  const app = loadCode();
+  app.getSheet_ = () => sheet;
+
+  app.writeAnalysis_({
+    calculatedAt: '2026-06-11 09:00:00',
+    products: [{
+      code: 'URN-001', name: 'Ürün', stock: 10, monthlyDemand: 20,
+      demandDeviation: 3.5, safetyStock: 6, criticalLevel: 26,
+      months: [20, 20, 20], suggestedPurchase: 60, status: 'critical',
+      dataDate: '2026-06-10'
+    }]
+  });
+
+  assert.deepEqual(calls[0], {
+    type: 'clear', row: 2, column: 1, rows: 3, columns: 14
+  });
+  assert.equal(calls[1].type, 'write');
+  assert.equal(calls[1].values.length, 1);
+  assert.equal(calls[1].values[0].length, 14);
+  assert.equal(calls[1].values[0][1], 'URN-001');
+});
+
+test('daily email includes summary, no-critical message, and purchase rows', () => {
+  const app = loadCode();
+  const email = app.buildDailyEmail_({
+    calculatedAt: '2026-06-11 09:00:00',
+    freshness: {latestDate: '2026-06-10'},
+    summary: {
+      totalProducts: 2, criticalCount: 0, lowCount: 1,
+      insufficientCount: 0, purchaseTotal: 24
+    },
+    products: [
+      {
+        code: 'URN-001', name: 'Bir', stock: 30, criticalLevel: 20,
+        months: [10, 10, 10], suggestedPurchase: 0, status: 'normal'
+      },
+      {
+        code: 'URN-002', name: 'İki', stock: 15, criticalLevel: 18,
+        months: [12, 12, 12], suggestedPurchase: 24, status: 'low'
+      }
+    ]
+  });
+
+  assert.match(email.subject, /11\.06\.2026|2026-06-11/);
+  assert.match(email.body, /Kritik ürün bulunmuyor/i);
+  assert.match(email.body, /URN-002/);
+  assert.match(email.body, /24/);
+  assert.match(email.body, /2026-06-10/);
+});
+
+test('daily email lists critical products separately', () => {
+  const app = loadCode();
+  const email = app.buildDailyEmail_({
+    calculatedAt: '2026-06-11 09:00:00',
+    freshness: {latestDate: '2026-06-10'},
+    summary: {
+      totalProducts: 1, criticalCount: 1, lowCount: 0,
+      insufficientCount: 0, purchaseTotal: 50
+    },
+    products: [{
+      code: 'URN-CRIT', name: 'Kritik Ürün', stock: 5, criticalLevel: 30,
+      months: [10, 10, 10], suggestedPurchase: 50, status: 'critical'
+    }]
+  });
+  assert.match(email.body, /KRİTİK ÜRÜNLER/);
+  assert.match(email.body, /URN-CRIT/);
+  assert.match(email.body, /30/);
+});
+
+test('recipient parser keeps valid comma-separated email addresses', () => {
+  const app = loadCode();
+  assert.deepEqual(
+    Array.from(app.parseRecipients_('a@example.com, invalid, b@test.com ; c@site.org')),
+    ['a@example.com', 'b@test.com', 'c@site.org']
+  );
+});
+
+test('daily trigger schedules the new analysis handler at configured time', () => {
+  const removed = [];
+  const scheduled = {};
+  const triggers = [
+    {getHandlerFunction: () => 'sendCriticalStockAlert'},
+    {getHandlerFunction: () => 'runDailyAnalysisAndEmail'},
+    {getHandlerFunction: () => 'otherHandler'}
+  ];
+  const builder = {
+    timeBased() { return this; },
+    everyDays(value) { scheduled.days = value; return this; },
+    atHour(value) { scheduled.hour = value; return this; },
+    nearMinute(value) { scheduled.minute = value; return this; },
+    inTimezone(value) { scheduled.timezone = value; return this; },
+    create() { scheduled.created = true; return this; }
   };
   const app = loadCode({
     ScriptApp: {
-      getProjectTriggers() {
-        return [];
-      },
-      deleteTrigger() {},
+      getProjectTriggers: () => triggers,
+      deleteTrigger: trigger => removed.push(trigger.getHandlerFunction()),
       newTrigger(handler) {
         scheduled.handler = handler;
         return builder;
       }
     }
   });
-  app.getSetting_ = () => '14:35';
+  app.getSetting_ = () => '08:25';
 
-  app.createDailyCriticalStockTrigger();
+  app.createDailyAnalysisTrigger();
 
+  assert.deepEqual(removed, ['sendCriticalStockAlert', 'runDailyAnalysisAndEmail']);
   assert.deepEqual(scheduled, {
-    handler: 'sendCriticalStockAlert',
+    handler: 'runDailyAnalysisAndEmail',
     days: 1,
-    hour: 14,
-    minute: 35,
+    hour: 8,
+    minute: 25,
     timezone: 'Europe/Istanbul',
     created: true
   });
 });
 
-test('browser copies initialize planning month in Europe/Istanbul without UTC conversion', () => {
-  [htmlSource, publishedHtmlSource].forEach(source => {
-    assert.match(source, /function currentMonthInIstanbul\(/);
-    assert.match(source, /timeZone:\s*["']Europe\/Istanbul["']/);
-    assert.doesNotMatch(source, /toISOString\(\)\.slice\(0,\s*7\)/);
-  });
-});
-
-test('browser copies include monochrome operations views and controls', () => {
-  [htmlSource, publishedHtmlSource].forEach(source => {
-    assert.match(source, /--canvas:\s*#f[0-9a-f]{5}/i);
-    assert.match(source, /--ink:\s*#1[0-9a-f]{5}/i);
-    assert.match(source, /data-view=["']history["']/);
-    assert.match(source, /data-view=["']orders["']/);
-    assert.match(source, /id=["']historyStart["']/);
-    assert.match(source, /id=["']historyEnd["']/);
-    assert.match(source, /id=["']historyProduct["']/);
-    assert.match(source, /id=["']historyType["']/);
-    assert.match(source, /id=["']orderDialog["']/);
-    assert.match(source, /id=["']orderForm["']/);
-    assert.match(source, /id=["']ordersRows["']/);
+test('browser copies expose only read-only Zirve reporting views', () => {
+  const {html, outputHtml} = sources();
+  [html, outputHtml].forEach(source => {
+    assert.match(source, /data-view=["']dashboard["']/);
+    assert.match(source, /data-view=["']analysis["']/);
+    assert.match(source, /data-view=["']forecast["']/);
+    assert.match(source, /data-view=["']settings["']/);
+    assert.match(source, /id=["']freshnessNotice["']/);
+    assert.match(source, /id=["']analysisSearch["']/);
+    assert.match(source, /id=["']analysisStatus["']/);
+    assert.match(source, /id=["']analysisRows["']/);
+    assert.match(source, /id=["']forecastRows["']/);
+    assert.doesNotMatch(source, /movement|orderCreate|orderStatus|accessToken/i);
+    assert.doesNotMatch(source, /Stok Geçmişi|Açık Siparişler/);
+    assert.doesNotMatch(source, /method:\s*["']POST["']/i);
   });
 });
 
 test('published and output HTML copies remain identical', () => {
-  assert.equal(publishedHtmlSource.replace(/\r\n/g, '\n'), htmlSource.replace(/\r\n/g, '\n'));
+  const {html, outputHtml} = sources();
+  assert.equal(html.replace(/\r\n/g, '\n'), outputHtml.replace(/\r\n/g, '\n'));
 });

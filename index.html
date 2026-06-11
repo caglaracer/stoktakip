@@ -14,13 +14,12 @@
       --soft: #f4f4f5;
       --dark: #27272a;
       --red: #b42318;
-      --shadow: 0 8px 24px rgba(24, 24, 27, .05);
+      --red-soft: #fee4e2;
+      --shadow: 0 8px 24px rgba(24,24,27,.05);
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0;
-      color: var(--ink);
-      background: var(--canvas);
+      margin: 0; color: var(--ink); background: var(--canvas);
       font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     button, input, select { font: inherit; }
@@ -31,80 +30,101 @@
       background: #18181b; color: #fafafa;
     }
     .brand { display: flex; gap: 10px; align-items: center; margin: 0 7px 28px; }
-    .mark { width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center; background: #fafafa; color: #18181b; font-weight: 900; }
+    .mark {
+      width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center;
+      background: #fafafa; color: #18181b; font-weight: 900;
+    }
     .brand strong { display: block; font-size: 17px; }
-    .brand small { color: #a1a1aa; }
+    .brand small, .side-note { color: #a1a1aa; }
     nav button {
       width: 100%; border: 0; border-radius: 6px; padding: 9px 11px; margin: 2px 0;
       color: #d4d4d8; background: transparent; text-align: left;
     }
     nav button:hover, nav button.active { color: white; background: #3f3f46; }
-    .side-note { position: absolute; left: 23px; right: 23px; bottom: 22px; color: #a1a1aa; font-size: 11px; }
-    main { padding: 26px clamp(18px, 3vw, 42px) 48px; min-width: 0; }
-    header { display: flex; justify-content: space-between; gap: 18px; align-items: start; margin-bottom: 20px; }
-    h1, h2, h3, p { margin-top: 0; }
-    h1 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.035em; margin-bottom: 3px; }
-    h2 { font-size: 17px; letter-spacing: -.02em; }
+    .side-note { position: absolute; left: 23px; right: 23px; bottom: 22px; font-size: 11px; }
+    main { min-width: 0; padding: 26px clamp(18px,3vw,42px) 48px; }
+    header {
+      display: flex; justify-content: space-between; gap: 18px;
+      align-items: start; margin-bottom: 20px;
+    }
+    h1, h2, p { margin-top: 0; }
+    h1 { margin-bottom: 3px; font-size: clamp(24px,3vw,32px); letter-spacing: -.035em; }
+    h2 { margin-bottom: 0; font-size: 17px; }
     .sub { color: var(--muted); }
-    .actions { display: flex; gap: 9px; flex-wrap: wrap; }
-    .btn { border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px; background: var(--card); color: var(--ink); }
+    .btn {
+      border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px;
+      background: var(--card); color: var(--ink);
+    }
     .btn:hover { background: var(--soft); }
-    .btn.primary { border-color: var(--dark); background: var(--dark); color: white; }
-    .btn.primary:hover { background: #09090b; }
-    .btn.danger { color: var(--red); }
-    .btn:disabled { opacity: .55; cursor: wait; }
     .grid { display: grid; gap: 12px; }
-    .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+    .stats { grid-template-columns: repeat(4,minmax(0,1fr)); margin-bottom: 12px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 8px; box-shadow: var(--shadow);
+    }
     .stat { padding: 15px; }
     .stat small { display: block; color: var(--muted); margin-bottom: 5px; }
-    .stat strong { font-size: 24px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-    .stat .delta { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
-    .split { grid-template-columns: minmax(0, 1.6fr) minmax(280px, .75fr); }
+    .stat strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+    .stat span { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .split { grid-template-columns: minmax(0,1.65fr) minmax(270px,.7fr); }
     .panel { padding: 16px; overflow: hidden; }
-    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-    .panel-head h2 { margin: 0; }
-    .field, .filters input, .filters select {
-      width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 9px; background: white; color: var(--ink);
+    .panel-head {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; margin-bottom: 12px;
     }
-    .filters { display: grid; grid-template-columns: 1fr 180px; gap: 8px; margin-bottom: 10px; }
-    .filters.history { grid-template-columns: 150px 150px minmax(180px,1fr) 160px; }
+    .notice {
+      padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--line);
+      border-radius: 6px; background: var(--soft); color: #3f3f46;
+    }
+    .notice.warning { border-color: #f5b7b1; background: #fff4f2; color: var(--red); }
+    .filters { display: grid; grid-template-columns: 1fr 190px; gap: 8px; margin-bottom: 10px; }
+    .field, .filters input, .filters select {
+      width: 100%; border: 1px solid var(--line); border-radius: 6px;
+      padding: 8px 9px; background: white; color: var(--ink);
+    }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; white-space: nowrap; }
-    th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; text-align: left; padding: 8px 9px; border-bottom: 1px solid var(--line); }
-    td { padding: 9px; border-bottom: 1px solid #e4e4e7; font-variant-numeric: tabular-nums; }
+    th {
+      position: sticky; top: 0; padding: 8px 9px; border-bottom: 1px solid var(--line);
+      background: var(--card); color: var(--muted); font-size: 10px;
+      text-align: left; text-transform: uppercase; letter-spacing: .07em;
+    }
+    td {
+      padding: 9px; border-bottom: 1px solid #e4e4e7;
+      font-variant-numeric: tabular-nums;
+    }
     tr:last-child td { border-bottom: 0; }
-    .status { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
+    .status {
+      display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+      padding: 4px 8px; font-size: 11px; font-weight: 700;
+    }
     .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
     .normal { color: #3f3f46; background: #f4f4f5; }
     .low { color: #27272a; background: #e4e4e7; }
-    .critical { color: var(--red); background: #fee4e2; }
-    .order-BEKLIYOR, .order-YOLDA, .order-TESLIM, .order-IPTAL { color: #3f3f46; background: #f4f4f5; }
-    .order-IPTAL { color: var(--red); background: #fee4e2; }
-    .alert-list { display: grid; gap: 10px; }
-    .alert { border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 6px; padding: 10px; }
+    .critical { color: var(--red); background: var(--red-soft); }
+    .veri_yetersiz { color: #52525b; background: #e4e4e7; }
+    .alert-list { display: grid; gap: 8px; }
+    .alert {
+      border: 1px solid var(--line); border-left: 3px solid var(--red);
+      border-radius: 6px; padding: 10px;
+    }
     .alert strong, .alert small { display: block; }
-    .alert small { color: var(--muted); margin-top: 3px; }
+    .alert small { margin-top: 3px; color: var(--muted); }
+    .empty { color: var(--muted); text-align: center; padding: 25px; }
     .view { display: none; }
     .view.active { display: block; }
-    .forecast-controls { grid-template-columns: repeat(4, 1fr); align-items: end; margin-bottom: 18px; }
-    label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
-    .forecast-total { color: var(--ink); font-weight: 800; }
-    dialog { width: min(520px, calc(100% - 28px)); border: 1px solid var(--line); border-radius: 8px; padding: 0; box-shadow: 0 25px 80px rgba(0,0,0,.2); }
-    dialog::backdrop { background: rgba(24,24,27,.55); }
-    .modal { padding: 20px; }
-    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
-    .notice { padding: 9px 11px; border-radius: 6px; background: var(--soft); color: #3f3f46; margin-bottom: 12px; font-size: 12px; }
-    .empty { color: var(--muted); text-align: center; padding: 26px; }
-    .compact-select { border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; background: white; }
-    #toast { position: fixed; right: 22px; bottom: 22px; padding: 10px 13px; border-radius: 6px; background: #18181b; color: white; opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
+    .settings-card { max-width: 760px; }
+    .steps { margin: 14px 0; padding-left: 20px; color: #3f3f46; }
+    .steps li { margin: 7px 0; }
+    #toast {
+      position: fixed; right: 22px; bottom: 22px; padding: 10px 13px;
+      border-radius: 6px; background: #18181b; color: white;
+      opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none;
+    }
     #toast.show { opacity: 1; transform: none; }
     @media (max-width: 980px) {
       .stats { grid-template-columns: 1fr 1fr; }
       .split { grid-template-columns: 1fr; }
-      .forecast-controls { grid-template-columns: 1fr 1fr; }
-      .filters.history { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 680px) {
       .shell { display: block; }
@@ -113,370 +133,215 @@
       nav { display: flex; overflow-x: auto; }
       nav button { width: auto; white-space: nowrap; }
       .side-note { display: none; }
-      main { padding: 24px 15px 45px; }
+      main { padding: 22px 14px 42px; }
       header { display: block; }
-      .actions { margin-top: 16px; }
-      .stats, .forecast-controls, .modal-grid { grid-template-columns: 1fr; }
-      .filters { grid-template-columns: 1fr; }
-      .filters.history { grid-template-columns: 1fr; }
+      header .btn { margin-top: 12px; }
+      .stats, .filters { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="shell">
     <aside>
-      <div class="brand"><div class="mark">SP</div><div><strong>Stok Pusulası</strong><small>Tek depo yönetimi</small></div></div>
+      <div class="brand"><div class="mark">SP</div><div><strong>Stok Pusulası</strong><small>Zirve analiz paneli</small></div></div>
       <nav>
         <button class="active" data-view="dashboard">Genel Bakış</button>
-        <button data-view="inventory">Stok Listesi</button>
-        <button data-view="history">Stok Geçmişi</button>
-        <button data-view="orders">Açık Siparişler</button>
-        <button data-view="forecast">3 Aylık Tedarik</button>
-        <button data-view="settings">Bağlantı Ayarları</button>
+        <button data-view="analysis">Stok Analizi</button>
+        <button data-view="forecast">3 Aylık Alım Planı</button>
+        <button data-view="settings">Veri ve Bağlantı</button>
       </nav>
-      <div class="side-note">Güncel stok ve geçmiş satışlardan karar desteği</div>
+      <div class="side-note">Zirve stokları ve aylık satışlardan karar desteği</div>
     </aside>
 
     <main>
       <header>
-        <div><h1 id="pageTitle">Genel Bakış</h1><p class="sub" id="pageSub">Deponuzun bugünkü durumu ve kritik ürünler.</p></div>
-        <div class="actions">
-          <button class="btn" id="refreshBtn">Yenile</button>
-          <button class="btn" id="orderBtn">+ Sipariş</button>
-          <button class="btn primary" id="movementBtn">+ Stok Hareketi</button>
-        </div>
+        <div><h1 id="pageTitle">Genel Bakış</h1><p class="sub" id="pageSub">Kritik stoklar ve üç aylık alım ihtiyacı.</p></div>
+        <button class="btn" id="refreshBtn">Yenile</button>
       </header>
+
+      <div id="freshnessNotice" class="notice"></div>
 
       <section id="dashboard" class="view active">
         <div class="grid stats">
-          <div class="card stat"><small>Toplam ürün</small><strong id="totalProducts">0</strong><span class="delta">Aktif ürünler</span></div>
-          <div class="card stat"><small>Kritik stok</small><strong id="criticalCount">0</strong><span class="delta">Hızlı tedarik gerekli</span></div>
-          <div class="card stat"><small>Düşük stok</small><strong id="lowCount">0</strong><span class="delta">Yakından takip edilmeli</span></div>
-          <div class="card stat"><small>3 aylık öneri</small><strong id="purchaseTotal">0</strong><span class="delta">Toplam ürün adedi</span></div>
+          <div class="card stat"><small>Toplam ürün</small><strong id="totalProducts">0</strong><span>Aktif stok kalemleri</span></div>
+          <div class="card stat"><small>Kritik stok</small><strong id="criticalCount">0</strong><span>Alım önceliği yüksek</span></div>
+          <div class="card stat"><small>Düşük stok</small><strong id="lowCount">0</strong><span>Yakından izlenmeli</span></div>
+          <div class="card stat"><small>Yetersiz veri</small><strong id="insufficientCount">0</strong><span>Satış geçmişi eksik</span></div>
         </div>
         <div class="grid split">
           <div class="card panel">
-            <div class="panel-head"><h2>Stok durumu</h2><button class="btn" data-go="inventory">Tümünü gör</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Ürün</th><th>Stok</th><th>Kritik eşik</th><th>Durum</th></tr></thead><tbody id="dashboardRows"></tbody></table></div>
+            <div class="panel-head"><h2>Kritik ürünler</h2><button class="btn" data-go="analysis">Tüm analizi gör</button></div>
+            <div class="table-wrap"><table><thead><tr><th>Ürün</th><th>Stok</th><th>Kritik eşik</th><th>3 aylık ihtiyaç</th><th>Önerilen alım</th></tr></thead><tbody id="criticalRows"></tbody></table></div>
           </div>
           <div class="card panel">
-            <div class="panel-head"><h2>Öncelikli uyarılar</h2></div>
-            <div class="alert-list" id="alerts"></div>
+            <div class="panel-head"><h2>Özet uyarılar</h2></div>
+            <div id="alerts" class="alert-list"></div>
           </div>
         </div>
       </section>
 
-      <section id="inventory" class="view">
+      <section id="analysis" class="view">
         <div class="card panel">
           <div class="filters">
-            <input id="searchInput" placeholder="Ürün kodu veya adı ara">
-            <select id="statusFilter"><option value="">Tüm durumlar</option><option value="critical">Kritik</option><option value="low">Düşük</option><option value="normal">Normal</option></select>
+            <input id="analysisSearch" placeholder="Ürün kodu veya adı ara">
+            <select id="analysisStatus">
+              <option value="">Tüm durumlar</option>
+              <option value="critical">Kritik</option>
+              <option value="low">Düşük</option>
+              <option value="normal">Normal</option>
+              <option value="veri_yetersiz">Yetersiz veri</option>
+            </select>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Güncel stok</th><th>Yoldaki</th><th>Tedarik günü</th><th>Durum</th></tr></thead><tbody id="inventoryRows"></tbody></table></div>
-        </div>
-      </section>
-
-      <section id="history" class="view">
-        <div class="card panel">
-          <div class="filters history">
-            <input id="historyStart" type="date" aria-label="Başlangıç tarihi">
-            <input id="historyEnd" type="date" aria-label="Bitiş tarihi">
-            <select id="historyProduct"><option value="">Tüm ürünler</option></select>
-            <select id="historyType"><option value="">Tüm işlemler</option><option value="GIRIS">Giriş</option><option value="CIKIS">Çıkış</option><option value="SAYIM">Sayım</option></select>
-          </div>
-          <div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Ürün</th><th>İşlem</th><th>Miktar</th><th>Önceki</th><th>Yeni</th><th>Açıklama</th><th>Kullanıcı</th></tr></thead><tbody id="historyRows"></tbody></table></div>
-        </div>
-      </section>
-
-      <section id="orders" class="view">
-        <div class="card panel">
-          <div class="panel-head"><div><h2>Sipariş kayıtları</h2><small class="sub">Teslim edilen siparişler stoğu otomatik değiştirmez.</small></div><button class="btn primary" id="orderPanelBtn">Yeni Sipariş</button></div>
-          <div class="table-wrap"><table><thead><tr><th>Sipariş</th><th>Tarih</th><th>Ürün</th><th>Miktar</th><th>Beklenen teslim</th><th>Durum</th><th>Açıklama</th></tr></thead><tbody id="ordersRows"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Stok</th><th>Aylık talep</th><th>Sapma</th><th>Güvenlik stoğu</th><th>Kritik eşik</th><th>Tedarik günü</th><th>Durum</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
         </div>
       </section>
 
       <section id="forecast" class="view">
         <div class="card panel">
-          <div class="grid forecast-controls">
-            <div><label for="modelSelect">Tahmin motoru</label><select class="field" id="modelSelect"><option value="hybrid">Karma model</option><option value="weighted">Ağırlıklı ortalama</option><option value="seasonal">Mevsimsellik</option></select></div>
-            <div><label for="scenarioSelect">Tedarik senaryosu</label><select class="field" id="scenarioSelect"><option value="1">Normal (%100)</option><option value=".9">Temkinli (%90)</option><option value="1.1">Güvenli (%110)</option><option value="1.2">Yüksek güvenlik (%120)</option></select></div>
-            <div><label>Plan başlangıcı</label><input class="field" id="startMonth" type="month"></div>
-            <button class="btn primary" id="calculateBtn">Planı Hesapla</button>
-          </div>
-          <div class="notice">Öneri = 3 aylık tahmin + güvenlik stoğu - güncel stok - yoldaki sipariş. Sonuç paket miktarına yuvarlanır.</div>
-          <div class="table-wrap"><table><thead><tr><th>Ürün</th><th id="m1">1. Ay</th><th id="m2">2. Ay</th><th id="m3">3. Ay</th><th>Stok + yoldaki</th><th>Önerilen alım</th></tr></thead><tbody id="forecastRows"></tbody><tfoot><tr><th colspan="5">Toplam öneri</th><th class="forecast-total" id="forecastGrandTotal">0</th></tr></tfoot></table></div>
+          <div class="panel-head"><div><h2>Üç aylık alım planı</h2><small class="sub">Talep tahmini, güvenlik stoğu ve güncel stok birlikte hesaplanır.</small></div><strong id="purchaseTotal">0</strong></div>
+          <div class="table-wrap"><table><thead><tr><th>Ürün</th><th>1. Ay</th><th>2. Ay</th><th>3. Ay</th><th>Güvenlik stoğu</th><th>Güncel stok</th><th>Önerilen alım</th></tr></thead><tbody id="forecastRows"></tbody></table></div>
         </div>
       </section>
 
       <section id="settings" class="view">
-        <div class="card panel" style="max-width:720px">
+        <div class="card panel settings-card">
           <h2>Apps Script bağlantısı</h2>
-          <p class="sub">Apps Script'i Web Uygulaması olarak yayınladıktan sonra oluşan <code>/exec</code> adresini girin.</p>
+          <p class="sub">Yayınlanan Apps Script web uygulamasının <code>/exec</code> adresini girin. Panel yalnızca veri okur.</p>
           <label for="apiUrl">Web uygulaması URL'si</label>
           <input class="field" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
-          <br><br>
-          <label for="accessToken">Yazma erişim anahtarı</label>
-          <input class="field" id="accessToken" type="password" placeholder="Apps Script özelliklerindeki ACCESS_TOKEN">
-          <div class="actions" style="margin-top:16px"><button class="btn primary" id="saveSettings">Kaydet ve Bağlan</button><button class="btn" id="demoBtn">Demo Veriye Dön</button></div>
+          <button class="btn" id="saveSettings" style="margin-top:12px">Kaydet ve Bağlan</button>
+          <h2 style="margin-top:24px">Günlük kullanım</h2>
+          <ol class="steps">
+            <li>Zirve'den güncel stok listesini dışa aktarın.</li>
+            <li><code>Guncel_Stok</code> sayfasında başlık dışındaki satırları yenileyin.</li>
+            <li>Her satırda <code>Veri_Tarihi</code> alanını doldurun.</li>
+            <li>Aylık toplamları <code>Aylik_Satislar</code> sayfasında güncel tutun.</li>
+          </ol>
         </div>
       </section>
     </main>
   </div>
-
-  <dialog id="movementDialog">
-    <form class="modal" id="movementForm">
-      <h2>Stok hareketi ekle</h2>
-      <div class="modal-grid">
-        <div style="grid-column:1/-1"><label>Ürün</label><select class="field" id="movementProduct" required></select></div>
-        <div><label>İşlem</label><select class="field" id="movementType"><option value="GIRIS">Giriş</option><option value="CIKIS">Çıkış</option><option value="SAYIM">Sayım / yeni stok</option></select></div>
-        <div><label>Miktar</label><input class="field" id="movementQuantity" type="number" min="0" step="0.01" required></div>
-        <div style="grid-column:1/-1"><label>Açıklama</label><input class="field" id="movementNote" placeholder="İrsaliye, müşteri veya kısa not"></div>
-      </div>
-      <div class="modal-actions"><button class="btn" type="button" id="cancelMovement">Vazgeç</button><button class="btn primary" type="submit">Kaydet</button></div>
-    </form>
-  </dialog>
-  <dialog id="orderDialog">
-    <form class="modal" id="orderForm">
-      <h2>Yeni sipariş</h2>
-      <div class="modal-grid">
-        <div style="grid-column:1/-1"><label>Ürün</label><select class="field" id="orderProduct" required></select></div>
-        <div><label>Sipariş tarihi</label><input class="field" id="orderDate" type="date" required></div>
-        <div><label>Beklenen teslim</label><input class="field" id="orderDelivery" type="date" required></div>
-        <div><label>Miktar</label><input class="field" id="orderQuantity" type="number" min="0.01" step="0.01" required></div>
-        <div><label>Durum</label><select class="field" id="orderStatus"><option value="BEKLIYOR">Bekliyor</option><option value="YOLDA">Yolda</option></select></div>
-        <div style="grid-column:1/-1"><label>Açıklama</label><input class="field" id="orderNote" placeholder="Tedarikçi veya kısa not"></div>
-      </div>
-      <div class="modal-actions"><button class="btn" type="button" id="cancelOrder">Vazgeç</button><button class="btn primary" id="saveOrder" type="submit">Siparişi Kaydet</button></div>
-    </form>
-  </dialog>
   <div id="toast"></div>
 
   <script>
     const demo = {
       products: [
-        {code:"URN-001", name:"Klasik Ürün", stock:42, incoming:0, leadTime:20, packSize:10, safetyStock:18, criticalLevel:38, status:"low"},
-        {code:"URN-002", name:"Mevsimlik Ürün", stock:12, incoming:20, leadTime:30, packSize:12, safetyStock:25, criticalLevel:48, status:"critical"},
-        {code:"URN-003", name:"Premium Ürün", stock:118, incoming:0, leadTime:14, packSize:6, safetyStock:20, criticalLevel:35, status:"normal"},
-        {code:"URN-004", name:"Ekonomik Ürün", stock:7, incoming:0, leadTime:25, packSize:20, safetyStock:30, criticalLevel:55, status:"critical"},
-        {code:"URN-005", name:"Standart Ürün", stock:86, incoming:30, leadTime:18, packSize:10, safetyStock:22, criticalLevel:40, status:"normal"}
+        {code:"URN-001",name:"Klasik Ürün",category:"Ana Grup",unit:"Adet",stock:42,dataDate:"2026-06-11",leadTime:20,packSize:10,monthlyDemand:58,demandDeviation:9.4,safetyStock:13,criticalLevel:52,months:[58,58,58],suggestedPurchase:150,status:"critical",warnings:[]},
+        {code:"URN-002",name:"Mevsimlik Ürün",category:"Sezon",unit:"Adet",stock:78,dataDate:"2026-06-11",leadTime:30,packSize:12,monthlyDemand:62,demandDeviation:12.2,safetyStock:21,criticalLevel:83,months:[62,62,62],suggestedPurchase:132,status:"critical",warnings:[]},
+        {code:"URN-003",name:"Premium Ürün",category:"Ana Grup",unit:"Adet",stock:118,dataDate:"2026-06-11",leadTime:14,packSize:6,monthlyDemand:42,demandDeviation:5.1,safetyStock:6,criticalLevel:26,months:[42,42,42],suggestedPurchase:18,status:"normal",warnings:[]},
+        {code:"URN-004",name:"Yeni Ürün",category:"Yeni",unit:"Adet",stock:25,dataDate:"2026-06-11",leadTime:30,packSize:1,monthlyDemand:0,demandDeviation:0,safetyStock:0,criticalLevel:0,months:[0,0,0],suggestedPurchase:0,status:"veri_yetersiz",warnings:["Aylık satış geçmişi bulunamadı."]}
       ],
-      forecasts: [
-        {code:"URN-001", months:[38,44,51], suggestedPurchase:120},
-        {code:"URN-002", months:[52,61,73], suggestedPurchase:180},
-        {code:"URN-003", months:[33,36,40], suggestedPurchase:20},
-        {code:"URN-004", months:[47,50,58], suggestedPurchase:180},
-        {code:"URN-005", months:[28,31,35], suggestedPurchase:0}
-      ],
-      movements: [
-        {id:"MOV-003",date:"2026-06-10",productCode:"URN-002",type:"CIKIS",quantity:8,previousStock:20,newStock:12,note:"Müşteri sevkiyatı",user:"demo"},
-        {id:"MOV-002",date:"2026-06-09",productCode:"URN-005",type:"GIRIS",quantity:30,previousStock:56,newStock:86,note:"Tedarik girişi",user:"demo"},
-        {id:"MOV-001",date:"2026-06-08",productCode:"URN-004",type:"SAYIM",quantity:7,previousStock:9,newStock:7,note:"Depo sayımı",user:"demo"}
-      ],
-      orders: [
-        {id:"ORD-002",orderDate:"2026-06-09",productCode:"URN-005",quantity:30,expectedDelivery:"2026-06-14",status:"YOLDA",note:"Standart tedarik"},
-        {id:"ORD-001",orderDate:"2026-06-08",productCode:"URN-002",quantity:20,expectedDelivery:"2026-06-13",status:"BEKLIYOR",note:"Acil sipariş"}
-      ],
-      summary: {totalProducts:5, criticalCount:2, lowCount:1, purchaseTotal:500}
+      summary:{totalProducts:4,criticalCount:2,lowCount:0,insufficientCount:1,purchaseTotal:300},
+      freshness:{latestDate:"2026-06-11",missing:false,inconsistent:false,stale:false,message:"Zirve verisi güncel."},
+      calculatedAt:"2026-06-11 09:00:00"
     };
-    const state = { data: demo, apiUrl: localStorage.getItem("stockApiUrl") || "", token: localStorage.getItem("stockAccessToken") || "" };
+
+    const state = {
+      data: structuredClone(demo),
+      apiUrl: localStorage.getItem("stockApiUrl") || ""
+    };
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
-    const fmt = value => new Intl.NumberFormat("tr-TR", {maximumFractionDigits:1}).format(Number(value) || 0);
-    const statusText = {normal:"Normal", low:"Düşük", critical:"Kritik"};
+    const fmt = value => new Intl.NumberFormat("tr-TR",{maximumFractionDigits:2}).format(Number(value)||0);
+    const statusText = {normal:"Normal",low:"Düşük",critical:"Kritik",veri_yetersiz:"Yetersiz veri"};
     const titles = {
-      dashboard:["Genel Bakış","Deponuzun bugünkü durumu ve kritik ürünler."],
-      inventory:["Stok Listesi","Tüm ürünlerin güncel stok seviyeleri."],
-      history:["Stok Geçmişi","Son stok giriş, çıkış ve sayım hareketleri."],
-      orders:["Açık Siparişler","Tedarik siparişlerini oluşturun ve durumlarını yönetin."],
-      forecast:["3 Aylık Tedarik","Geçmiş satışlara göre satın alma planı."],
-      settings:["Bağlantı Ayarları","Google Sheets ve Apps Script bağlantısı."]
+      dashboard:["Genel Bakış","Kritik stoklar ve üç aylık alım ihtiyacı."],
+      analysis:["Stok Analizi","Otomatik kritik eşikler ve güvenlik stokları."],
+      forecast:["3 Aylık Alım Planı","Önümüzdeki üç ay için önerilen ürün adetleri."],
+      settings:["Veri ve Bağlantı","Zirve aktarımı ve Apps Script bağlantısı."]
     };
 
     function toast(message) {
-      $("toast").textContent = message; $("toast").classList.add("show");
-      setTimeout(() => $("toast").classList.remove("show"), 2600);
+      $("toast").textContent = message;
+      $("toast").classList.add("show");
+      setTimeout(() => $("toast").classList.remove("show"),2600);
     }
     function showView(id) {
-      document.querySelectorAll(".view").forEach(el => el.classList.toggle("active", el.id === id));
-      document.querySelectorAll("nav button").forEach(el => el.classList.toggle("active", el.dataset.view === id));
-      [$("pageTitle").textContent, $("pageSub").textContent] = titles[id];
+      document.querySelectorAll(".view").forEach(el => el.classList.toggle("active",el.id===id));
+      document.querySelectorAll("nav button").forEach(el => el.classList.toggle("active",el.dataset.view===id));
+      $("pageTitle").textContent = titles[id][0];
+      $("pageSub").textContent = titles[id][1];
     }
-    function statusBadge(status) { return `<span class="status ${esc(status)}">${statusText[status] || status}</span>`; }
+    function badge(status) {
+      return `<span class="status ${esc(status)}">${esc(statusText[status]||status)}</span>`;
+    }
+    function emptyRow(columns,message="Kayıt bulunamadı.") {
+      return `<tr><td colspan="${columns}" class="empty">${esc(message)}</td></tr>`;
+    }
     function render() {
-      const {products = [], forecasts = [], summary = {}} = state.data;
+      const {products=[],summary={},freshness={}} = state.data;
       $("totalProducts").textContent = summary.totalProducts ?? products.length;
-      $("criticalCount").textContent = summary.criticalCount ?? products.filter(p => p.status === "critical").length;
-      $("lowCount").textContent = summary.lowCount ?? products.filter(p => p.status === "low").length;
-      $("purchaseTotal").textContent = fmt(summary.purchaseTotal ?? forecasts.reduce((a,f) => a + Number(f.suggestedPurchase || 0), 0));
-      $("dashboardRows").innerHTML = products.slice().sort((a,b) => ({critical:0,low:1,normal:2}[a.status]-({critical:0,low:1,normal:2}[b.status]))).slice(0,6).map(p =>
-        `<tr><td><strong>${esc(p.name)}</strong><br><small class="sub">${esc(p.code)}</small></td><td>${fmt(p.stock)}</td><td>${fmt(p.criticalLevel)}</td><td>${statusBadge(p.status)}</td></tr>`).join("") || emptyRow(4);
-      const urgent = products.filter(p => p.status !== "normal");
-      $("alerts").innerHTML = urgent.map(p => `<div class="alert"><strong>${esc(p.name)}</strong><small>${fmt(p.stock)} adet stokta · Kritik eşik ${fmt(p.criticalLevel)}</small></div>`).join("") || `<p class="empty">Kritik uyarı bulunmuyor.</p>`;
-      $("movementProduct").innerHTML = products.map(p => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join("");
-      $("orderProduct").innerHTML = products.map(p => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join("");
-      $("historyProduct").innerHTML = `<option value="">Tüm ürünler</option>` + products.map(p => `<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.name)}</option>`).join("");
-      renderInventory(); renderHistory(); renderOrders(); renderForecasts(forecasts);
+      $("criticalCount").textContent = summary.criticalCount ?? 0;
+      $("lowCount").textContent = summary.lowCount ?? 0;
+      $("insufficientCount").textContent = summary.insufficientCount ?? 0;
+      $("purchaseTotal").textContent = `${fmt(summary.purchaseTotal)} adet`;
+      $("freshnessNotice").textContent = `${freshness.message || "Veri tarihi bilinmiyor."} Son veri: ${freshness.latestDate || "—"} · Hesaplama: ${state.data.calculatedAt || "—"}`;
+      $("freshnessNotice").classList.toggle("warning",!!(freshness.missing||freshness.inconsistent||freshness.stale));
+
+      const critical = products.filter(product => product.status==="critical");
+      $("criticalRows").innerHTML = critical.map(product =>
+        `<tr><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small></td><td>${fmt(product.stock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt((product.months||[]).reduce((a,b)=>a+Number(b||0),0))}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
+      ).join("") || emptyRow(5,"Kritik ürün bulunmuyor.");
+      $("alerts").innerHTML = critical.map(product =>
+        `<div class="alert"><strong>${esc(product.name)}</strong><small>Stok ${fmt(product.stock)} · Kritik eşik ${fmt(product.criticalLevel)} · Alım ${fmt(product.suggestedPurchase)}</small></div>`
+      ).join("") || `<p class="empty">Kritik stok uyarısı yok.</p>`;
+      renderAnalysis();
+      renderForecast();
     }
-    function emptyRow(cols) { return `<tr><td colspan="${cols}" class="empty">Kayıt bulunamadı.</td></tr>`; }
-    function renderInventory() {
-      const q = $("searchInput").value.toLocaleLowerCase("tr");
-      const status = $("statusFilter").value;
-      const rows = state.data.products.filter(p => (!q || `${p.code} ${p.name}`.toLocaleLowerCase("tr").includes(q)) && (!status || p.status === status));
-      $("inventoryRows").innerHTML = rows.map(p => `<tr><td>${esc(p.code)}</td><td><strong>${esc(p.name)}</strong></td><td>${fmt(p.stock)}</td><td>${fmt(p.incoming)}</td><td>${fmt(p.leadTime)}</td><td>${statusBadge(p.status)}</td></tr>`).join("") || emptyRow(6);
-    }
-    function monthLabels() {
-      const base = $("startMonth").value ? new Date(`${$("startMonth").value}-01T12:00:00`) : new Date();
-      return [0,1,2].map(offset => {
-        const d = new Date(base.getFullYear(), base.getMonth()+offset, 1);
-        return d.toLocaleDateString("tr-TR", {month:"short", year:"numeric"});
-      });
-    }
-    function productMap() { return Object.fromEntries((state.data.products || []).map(p => [p.code,p])); }
-    function renderHistory() {
-      const start = $("historyStart").value;
-      const end = $("historyEnd").value;
-      const product = $("historyProduct").value;
-      const type = $("historyType").value;
-      const products = productMap();
-      const rows = (state.data.movements || []).filter(m =>
-        (!start || m.date >= start) && (!end || m.date <= end) &&
-        (!product || m.productCode === product) && (!type || m.type === type)
+    function renderAnalysis() {
+      const query = $("analysisSearch").value.toLocaleLowerCase("tr");
+      const status = $("analysisStatus").value;
+      const rows = (state.data.products||[]).filter(product =>
+        (!query || `${product.code} ${product.name}`.toLocaleLowerCase("tr").includes(query)) &&
+        (!status || product.status===status)
       );
-      $("historyRows").innerHTML = rows.map(m => {
-        const p = products[m.productCode] || {name:m.productCode};
-        return `<tr><td>${esc(m.timestamp || m.date)}</td><td><strong>${esc(p.name)}</strong><br><small class="sub">${esc(m.productCode)}</small></td><td>${esc(m.type)}</td><td>${fmt(m.quantity)}</td><td>${fmt(m.previousStock)}</td><td>${fmt(m.newStock)}</td><td>${esc(m.note || "—")}</td><td>${esc(m.user || "—")}</td></tr>`;
-      }).join("") || emptyRow(8);
+      $("analysisRows").innerHTML = rows.map(product =>
+        `<tr><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${fmt(product.stock)}</td><td>${fmt(product.monthlyDemand)}</td><td>${fmt(product.demandDeviation)}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt(product.leadTime)}</td><td>${badge(product.status)}</td></tr>`
+      ).join("") || emptyRow(9);
     }
-    function renderOrders() {
-      const products = productMap();
-      $("ordersRows").innerHTML = (state.data.orders || []).map(order => {
-        const p = products[order.productCode] || {name:order.productCode};
-        const options = ["BEKLIYOR","YOLDA","TESLIM","IPTAL"].map(status => `<option value="${status}"${status === order.status ? " selected" : ""}>${status}</option>`).join("");
-        return `<tr><td><strong>${esc(order.id)}</strong></td><td>${esc(order.orderDate)}</td><td><strong>${esc(p.name)}</strong><br><small class="sub">${esc(order.productCode)}</small></td><td>${fmt(order.quantity)}</td><td>${esc(order.expectedDelivery)}</td><td><select class="compact-select order-${esc(order.status)}" data-order-status="${esc(order.id)}">${options}</select></td><td>${esc(order.note || "—")}</td></tr>`;
-      }).join("") || emptyRow(7);
+    function renderForecast() {
+      const rows = (state.data.products||[]).slice().sort((a,b)=>Number(b.suggestedPurchase)-Number(a.suggestedPurchase));
+      $("forecastRows").innerHTML = rows.map(product =>
+        `<tr><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small></td><td>${fmt(product.months?.[0])}</td><td>${fmt(product.months?.[1])}</td><td>${fmt(product.months?.[2])}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.stock)}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
+      ).join("") || emptyRow(7);
     }
-    function currentMonthInIstanbul(date = new Date()) {
-      const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone:"Europe/Istanbul", year:"numeric", month:"2-digit"
-      }).formatToParts(date);
-      const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-      return `${values.year}-${values.month}`;
-    }
-    function todayInIstanbul(date = new Date()) {
-      const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone:"Europe/Istanbul", year:"numeric", month:"2-digit", day:"2-digit"
-      }).formatToParts(date);
-      const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-      return `${values.year}-${values.month}-${values.day}`;
-    }
-    function renderForecasts(forecasts) {
-      monthLabels().forEach((label,i) => $(`m${i+1}`).textContent = label);
-      const products = Object.fromEntries(state.data.products.map(p => [p.code,p]));
-      $("forecastRows").innerHTML = forecasts.map(f => {
-        const p = products[f.code] || {name:f.code,stock:0,incoming:0};
-        return `<tr><td><strong>${esc(p.name)}</strong><br><small class="sub">${esc(f.code)}</small></td>${(f.months || [0,0,0]).map(v => `<td>${fmt(v)}</td>`).join("")}<td>${fmt(Number(p.stock)+Number(p.incoming))}</td><td class="forecast-total">${fmt(f.suggestedPurchase)}</td></tr>`;
-      }).join("") || emptyRow(6);
-      $("forecastGrandTotal").textContent = fmt(forecasts.reduce((sum,f) => sum + Number(f.suggestedPurchase || 0), 0));
-    }
-    async function api(action, payload = null) {
+    async function api(action) {
       if (!state.apiUrl) throw new Error("API adresi tanımlı değil.");
-      if (payload) {
-        const response = await fetch(state.apiUrl, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({action, token:state.token, ...payload})});
-        return response.json();
-      }
-      const url = new URL(state.apiUrl); url.searchParams.set("action", action); url.searchParams.set("_", Date.now());
-      const response = await fetch(url); return response.json();
+      const url = new URL(state.apiUrl);
+      url.searchParams.set("action",action);
+      url.searchParams.set("_",Date.now());
+      const response = await fetch(url);
+      return response.json();
     }
-    async function loadData(showMessage = true) {
-      if (!state.apiUrl) { state.data = structuredClone(demo); render(); if (showMessage) toast("Demo veriler gösteriliyor."); return; }
+    async function loadData(showMessage=true) {
+      if (!state.apiUrl) {
+        state.data = structuredClone(demo);
+        render();
+        if (showMessage) toast("Demo veriler gösteriliyor.");
+        return;
+      }
       try {
         const result = await api("dashboard");
-        if (!result.ok) throw new Error(result.error || "Veri alınamadı.");
-        state.data = result.data; render(); if (showMessage) toast("Google Sheets verileri yenilendi.");
-      } catch (error) { toast(`Bağlantı hatası: ${error.message}`); }
-    }
-    async function calculate() {
-      if (!state.apiUrl) {
-        const factor = Number($("scenarioSelect").value);
-        const forecasts = demo.forecasts.map(f => ({...f, months:f.months.map(v => Math.ceil(v*factor)), suggestedPurchase:Math.ceil(f.suggestedPurchase*factor)}));
-        renderForecasts(forecasts); toast("Demo tedarik planı hesaplandı."); return;
+        if (!result.ok) throw new Error(result.error||"Veri alınamadı.");
+        state.data = result.data;
+        render();
+        if (showMessage) toast("Google Sheets analizi yenilendi.");
+      } catch (error) {
+        toast(`Bağlantı hatası: ${error.message}`);
       }
-      try {
-        const result = await api("forecast", {model:$("modelSelect").value, scenario:Number($("scenarioSelect").value), startMonth:$("startMonth").value});
-        if (!result.ok) throw new Error(result.error);
-        state.data.forecasts = result.data.forecasts; state.data.summary.purchaseTotal = result.data.purchaseTotal;
-        render(); toast("Tedarik planı hesaplandı.");
-      } catch (error) { toast(`Hesaplama hatası: ${error.message}`); }
     }
 
-    document.querySelectorAll("nav button").forEach(btn => btn.addEventListener("click", () => showView(btn.dataset.view)));
-    document.querySelectorAll("[data-go]").forEach(btn => btn.addEventListener("click", () => showView(btn.dataset.go)));
-    $("searchInput").addEventListener("input", renderInventory);
-    $("statusFilter").addEventListener("change", renderInventory);
-    ["historyStart","historyEnd","historyProduct","historyType"].forEach(id => $(id).addEventListener("change", renderHistory));
-    $("startMonth").value = currentMonthInIstanbul();
-    $("startMonth").addEventListener("change", () => renderForecasts(state.data.forecasts || []));
-    $("calculateBtn").addEventListener("click", calculate);
-    $("refreshBtn").addEventListener("click", () => loadData());
-    $("movementBtn").addEventListener("click", () => $("movementDialog").showModal());
-    $("cancelMovement").addEventListener("click", () => $("movementDialog").close());
-    function openOrderDialog() {
-      $("orderDate").value = todayInIstanbul();
-      if (!$("orderDelivery").value) $("orderDelivery").value = todayInIstanbul();
-      $("orderDialog").showModal();
-    }
-    $("orderBtn").addEventListener("click", openOrderDialog);
-    $("orderPanelBtn").addEventListener("click", openOrderDialog);
-    $("cancelOrder").addEventListener("click", () => $("orderDialog").close());
-    $("movementForm").addEventListener("submit", async event => {
-      event.preventDefault();
-      if (!state.apiUrl) { toast("Hareket kaydetmek için Apps Script bağlantısını kurun."); return; }
-      try {
-        const result = await api("movement", {movement:{productCode:$("movementProduct").value,type:$("movementType").value,quantity:Number($("movementQuantity").value),note:$("movementNote").value}});
-        if (!result.ok) throw new Error(result.error);
-        $("movementDialog").close(); event.target.reset(); await loadData(false); toast("Stok hareketi kaydedildi.");
-      } catch (error) { toast(`Kayıt hatası: ${error.message}`); }
-    });
-    $("orderForm").addEventListener("submit", async event => {
-      event.preventDefault();
-      if (!state.apiUrl) { toast("Sipariş kaydetmek için Apps Script bağlantısını kurun."); return; }
-      const button = $("saveOrder");
-      button.disabled = true;
-      try {
-        const result = await api("orderCreate", {order:{
-          productCode:$("orderProduct").value, quantity:Number($("orderQuantity").value),
-          orderDate:$("orderDate").value, expectedDelivery:$("orderDelivery").value,
-          status:$("orderStatus").value, note:$("orderNote").value
-        }});
-        if (!result.ok) throw new Error(result.error);
-        $("orderDialog").close(); event.target.reset(); await loadData(false); showView("orders"); toast("Sipariş kaydedildi.");
-      } catch (error) { toast(`Sipariş hatası: ${error.message}`); }
-      finally { button.disabled = false; }
-    });
-    $("ordersRows").addEventListener("change", async event => {
-      const select = event.target.closest("[data-order-status]");
-      if (!select) return;
-      const orderId = select.dataset.orderStatus;
-      const previous = (state.data.orders || []).find(order => order.id === orderId)?.status || "BEKLIYOR";
-      if (!state.apiUrl) { select.value = previous; toast("Durum değiştirmek için Apps Script bağlantısını kurun."); return; }
-      if (select.value === "IPTAL" && !confirm(`${orderId} siparişini iptal etmek istediğinize emin misiniz?`)) { select.value = previous; return; }
-      select.disabled = true;
-      try {
-        const result = await api("orderStatus", {order:{orderId, status:select.value}});
-        if (!result.ok) throw new Error(result.error);
-        await loadData(false); toast("Sipariş durumu güncellendi.");
-      } catch (error) { select.value = previous; toast(`Durum hatası: ${error.message}`); }
-      finally { select.disabled = false; }
-    });
-    $("apiUrl").value = state.apiUrl; $("accessToken").value = state.token;
-    $("saveSettings").addEventListener("click", async () => {
-      state.apiUrl = $("apiUrl").value.trim(); state.token = $("accessToken").value.trim();
-      localStorage.setItem("stockApiUrl", state.apiUrl); localStorage.setItem("stockAccessToken", state.token);
-      await loadData(); showView("dashboard");
-    });
-    $("demoBtn").addEventListener("click", () => {
-      state.apiUrl = ""; state.token = ""; localStorage.removeItem("stockApiUrl"); localStorage.removeItem("stockAccessToken");
-      $("apiUrl").value = ""; $("accessToken").value = ""; loadData(); showView("dashboard");
+    document.querySelectorAll("nav button").forEach(button => button.addEventListener("click",()=>showView(button.dataset.view)));
+    document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click",()=>showView(button.dataset.go)));
+    $("analysisSearch").addEventListener("input",renderAnalysis);
+    $("analysisStatus").addEventListener("change",renderAnalysis);
+    $("refreshBtn").addEventListener("click",()=>loadData());
+    $("apiUrl").value = state.apiUrl;
+    $("saveSettings").addEventListener("click",async()=>{
+      state.apiUrl = $("apiUrl").value.trim();
+      localStorage.setItem("stockApiUrl",state.apiUrl);
+      await loadData();
+      showView("dashboard");
     });
     loadData(false);
   </script>
