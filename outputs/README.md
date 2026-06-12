@@ -87,7 +87,13 @@ Günlük işlem:
 
 1. Güncel analiz hesaplanır.
 2. `Analiz` sekmesi son sonuçlarla yenilenir.
-3. Kritik ürün olmasa bile günlük özet gönderilir.
+3. Kritik ürün olmasa bile kısa HTML özet gönderilir.
+4. En acil beş kritik ürün e-posta gövdesinde gösterilir.
+5. Alım önerisi bulunan tüm ürünler `Stok_Alim_Onerileri_YYYY-AA-GG.xlsx`
+   dosyası olarak e-postaya eklenir.
+
+Excel eki yalnızca alım önerisi sıfırdan büyük ürünleri içerir ve önerilen alım
+miktarına göre büyükten küçüğe sıralanır.
 
 ## 6. Web uygulaması ve GitHub Pages
 

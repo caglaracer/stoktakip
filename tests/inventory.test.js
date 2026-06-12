@@ -204,7 +204,7 @@ test('analysis writer replaces rows and writes all fourteen columns', () => {
   assert.equal(calls[1].values[0][1], 'URN-001');
 });
 
-test('daily email includes summary, no-critical message, and purchase rows', () => {
+test('daily email includes a compact summary and attachment note', () => {
   const app = loadCode();
   const email = app.buildDailyEmail_({
     calculatedAt: '2026-06-11 09:00:00',
@@ -227,28 +227,100 @@ test('daily email includes summary, no-critical message, and purchase rows', () 
 
   assert.match(email.subject, /11\.06\.2026|2026-06-11/);
   assert.match(email.body, /Kritik ürün bulunmuyor/i);
-  assert.match(email.body, /URN-002/);
   assert.match(email.body, /24/);
   assert.match(email.body, /2026-06-10/);
+  assert.match(email.body, /Excel/i);
+  assert.doesNotMatch(email.body, /URN-002/);
+  assert.match(email.htmlBody, /Stok Pusulası/);
 });
 
-test('daily email lists critical products separately', () => {
+test('daily email lists only the five most urgent critical products', () => {
   const app = loadCode();
+  const products = Array.from({length: 7}, (_, index) => ({
+    code: `URN-${index + 1}`,
+    name: `Kritik Ürün ${index + 1}`,
+    stock: index,
+    criticalLevel: 20,
+    months: [10, 10, 10],
+    suggestedPurchase: 50 - index,
+    status: 'critical'
+  }));
   const email = app.buildDailyEmail_({
     calculatedAt: '2026-06-11 09:00:00',
     freshness: {latestDate: '2026-06-10'},
     summary: {
+      totalProducts: 7, criticalCount: 7, lowCount: 0,
+      insufficientCount: 0, purchaseTotal: 329
+    },
+    products
+  });
+  assert.match(email.body, /URN-1/);
+  assert.match(email.body, /URN-5/);
+  assert.doesNotMatch(email.body, /URN-6/);
+  assert.doesNotMatch(email.body, /URN-7/);
+});
+
+test('purchase report rows include only positive suggestions sorted descending', () => {
+  const app = loadCode();
+  const rows = app.buildPurchaseReportRows_([
+    {
+      code: 'URN-LOW', name: 'Düşük', stock: 4, criticalLevel: 8,
+      months: [2, 2, 2], suggestedPurchase: 6, status: 'low'
+    },
+    {
+      code: 'URN-NONE', name: 'Yok', stock: 20, criticalLevel: 8,
+      months: [2, 2, 2], suggestedPurchase: 0, status: 'normal'
+    },
+    {
+      code: 'URN-HIGH', name: 'Yüksek', stock: 1, criticalLevel: 10,
+      months: [5, 5, 5], suggestedPurchase: 20, status: 'critical'
+    }
+  ]);
+
+  assert.deepEqual(Array.from(rows, row => Array.from(row)), [
+    ['URN-HIGH', 'Yüksek', 1, 10, 15, 20, 'Kritik'],
+    ['URN-LOW', 'Düşük', 4, 8, 6, 6, 'Düşük']
+  ]);
+});
+
+test('daily analysis email sends xlsx attachment and trashes temporary spreadsheet', () => {
+  const sent = [];
+  const trashed = [];
+  const app = loadCode({
+    MailApp: {
+      sendEmail(message) {
+        sent.push(message);
+      }
+    }
+  });
+  const analysis = {
+    calculatedAt: '2026-06-11 09:00:00',
+    freshness: {latestDate: '2026-06-10'},
+    summary: {
       totalProducts: 1, criticalCount: 1, lowCount: 0,
-      insufficientCount: 0, purchaseTotal: 50
+      insufficientCount: 0, purchaseTotal: 20
     },
     products: [{
-      code: 'URN-CRIT', name: 'Kritik Ürün', stock: 5, criticalLevel: 30,
-      months: [10, 10, 10], suggestedPurchase: 50, status: 'critical'
+      code: 'URN-001', name: 'Ürün', stock: 1, criticalLevel: 10,
+      months: [5, 5, 5], suggestedPurchase: 20, status: 'critical'
     }]
+  };
+  app.getDashboardData_ = () => analysis;
+  app.writeAnalysis_ = () => {};
+  app.getSetting_ = () => 'test@example.com';
+  app.createPurchaseReportAttachment_ = () => ({
+    blob: {name: 'Stok_Alim_Onerileri_2026-06-11.xlsx'},
+    temporaryFileId: 'temp-123'
   });
-  assert.match(email.body, /KRİTİK ÜRÜNLER/);
-  assert.match(email.body, /URN-CRIT/);
-  assert.match(email.body, /30/);
+  app.trashTemporaryReport_ = id => trashed.push(id);
+
+  app.runDailyAnalysisAndEmail();
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].attachments.length, 1);
+  assert.equal(sent[0].attachments[0].name, 'Stok_Alim_Onerileri_2026-06-11.xlsx');
+  assert.match(sent[0].htmlBody, /Stok Pusulası/);
+  assert.deepEqual(trashed, ['temp-123']);
 });
 
 test('recipient parser keeps valid comma-separated email addresses', () => {
