@@ -14,7 +14,9 @@ const CONFIG = Object.freeze({
 const HEADERS = Object.freeze({
   Guncel_Stok: ['Urun_Kodu', 'Urun_Adi', 'Kategori', 'Birim', 'Guncel_Stok', 'Veri_Tarihi'],
   Aylik_Satislar: ['Yil', 'Ay', 'Urun_Kodu', 'Satis_Miktari'],
-  Urun_Ayarlari: ['Urun_Kodu', 'Tedarik_Suresi_Gun', 'Paket_Miktari', 'Aktif'],
+  Urun_Ayarlari: [
+    'Urun_Kodu', 'Tedarik_Suresi_Gun', 'Paket_Miktari', 'Aktif', 'Takip_Seviyesi'
+  ],
   Analiz: [
     'Hesaplama_Tarihi', 'Urun_Kodu', 'Urun_Adi', 'Guncel_Stok',
     'Aylik_Talep', 'Talep_Sapmasi', 'Guvenlik_Stogu', 'Kritik_Esik',
@@ -41,6 +43,20 @@ function setupAnalysisSystem() {
 
 function doGet(e) {
   return route_((e && e.parameter && e.parameter.action) || 'dashboard');
+}
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(
+      e && e.postData && e.postData.contents ? e.postData.contents : '{}'
+    );
+    if (payload.action !== 'updateTrackingLevels') {
+      throw new Error('Geçersiz yazma işlemi.');
+    }
+    return json_({ok: true, data: handleTrackingUpdate_(payload)});
+  } catch (error) {
+    return json_({ok: false, error: error.message});
+  }
 }
 
 function route_(action) {
@@ -74,11 +90,12 @@ function calculateAnalysis_(request) {
   const stocks = readCurrentStock_();
   const sales = readMonthlySales_();
   const settings = readProductSettings_();
-  const products = stocks.map(function(stock) {
+  const allProducts = stocks.map(function(stock) {
     const productSettings = settings[stock.code] || {
       leadTime: 30,
       packSize: 1,
       active: true,
+      trackingLevel: 'NORMAL',
       missing: true
     };
     return analyzeProduct_(
@@ -87,14 +104,27 @@ function calculateAnalysis_(request) {
       productSettings,
       request || {}
     );
-  }).filter(function(product) {
-    return product.active;
   });
+  const products = allProducts.filter(function(product) {
+    return product.active && product.trackingLevel !== 'TAKIP_ETME';
+  }).sort(compareProductPriority_);
   const freshness = calculateFreshness_(stocks, request && request.now ? request.now : new Date());
   return {
     products: products,
+    trackingProducts: allProducts.map(function(product) {
+      return {
+        code: product.code,
+        name: product.name,
+        trackingLevel: product.trackingLevel,
+        active: product.active,
+        status: product.status
+      };
+    }).sort(compareProductPriority_),
     summary: {
       totalProducts: products.length,
+      priorityCount: products.filter(function(p) {
+        return p.trackingLevel === 'ONCELIKLI';
+      }).length,
       criticalCount: products.filter(function(p) { return p.status === 'critical'; }).length,
       lowCount: products.filter(function(p) { return p.status === 'low'; }).length,
       insufficientCount: products.filter(function(p) { return p.status === 'veri_yetersiz'; }).length,
@@ -107,6 +137,7 @@ function calculateAnalysis_(request) {
 
 function analyzeProduct_(stock, history, settings, request) {
   const active = settings.active !== false;
+  const trackingLevel = normalizeTrackingLevel_(settings.trackingLevel);
   const recent = history.slice().sort(function(a, b) {
     return b.date - a.date;
   }).slice(0, 12);
@@ -136,6 +167,7 @@ function analyzeProduct_(stock, history, settings, request) {
     leadTime: number_(settings.leadTime) || 30,
     packSize: number_(settings.packSize) || 1,
     active: active,
+    trackingLevel: trackingLevel,
     settingsMissing: !!settings.missing,
     monthlyDemand: monthlyDemand,
     demandDeviation: round_(demandDeviation, 2),
@@ -146,6 +178,38 @@ function analyzeProduct_(stock, history, settings, request) {
     status: status,
     warnings: warnings
   };
+}
+
+function trackingToken_(value) {
+  return clean_(value)
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/Ö/g, 'O')
+    .replace(/Ü/g, 'U')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ş/g, 'S')
+    .replace(/Ç/g, 'C')
+    .replace(/[\s-]+/g, '_');
+}
+
+function normalizeTrackingLevel_(value) {
+  const normalized = trackingToken_(value);
+  if (normalized === 'ONCELIKLI') return 'ONCELIKLI';
+  if (normalized === 'TAKIP_ETME') return 'TAKIP_ETME';
+  return 'NORMAL';
+}
+
+function trackingRank_(level) {
+  const normalized = normalizeTrackingLevel_(level);
+  if (normalized === 'ONCELIKLI') return 0;
+  if (normalized === 'NORMAL') return 1;
+  return 2;
+}
+
+function compareProductPriority_(a, b) {
+  return trackingRank_(a.trackingLevel) - trackingRank_(b.trackingLevel) ||
+    number_(b.suggestedPurchase) - number_(a.suggestedPurchase) ||
+    clean_(a.name).localeCompare(clean_(b.name), 'tr');
 }
 
 function stockStatus_(stock, criticalLevel, hasHistory) {
@@ -244,6 +308,7 @@ function readProductSettings_() {
       leadTime: number_(row.Tedarik_Suresi_Gun) || 30,
       packSize: number_(row.Paket_Miktari) || 1,
       active: clean_(row.Aktif || 'EVET').toUpperCase() !== 'HAYIR',
+      trackingLevel: normalizeTrackingLevel_(row.Takip_Seviyesi),
       missing: false
     };
   });
@@ -343,10 +408,13 @@ function buildDailyEmail_(analysis) {
   const critical = analysis.products.filter(function(product) {
     return product.status === 'critical';
   }).sort(function(a, b) {
+    const priorityDifference =
+      trackingRank_(a.trackingLevel) - trackingRank_(b.trackingLevel);
     const deficitDifference =
       (number_(b.criticalLevel) - number_(b.stock)) -
       (number_(a.criticalLevel) - number_(a.stock));
-    return deficitDifference || number_(b.suggestedPurchase) - number_(a.suggestedPurchase);
+    return priorityDifference || deficitDifference ||
+      number_(b.suggestedPurchase) - number_(a.suggestedPurchase);
   }).slice(0, 5);
   const dateLabel = String(analysis.calculatedAt || '').slice(0, 10);
   const summaryLines = [
@@ -461,11 +529,20 @@ function statusLabel_(status) {
   }[status] || clean_(status);
 }
 
+function trackingLevelLabel_(level) {
+  return {
+    ONCELIKLI: 'Öncelikli',
+    NORMAL: 'Normal',
+    TAKIP_ETME: 'Takip etme'
+  }[normalizeTrackingLevel_(level)];
+}
+
 function buildPurchaseReportRows_(products) {
   return products.filter(function(product) {
     return number_(product.suggestedPurchase) > 0;
   }).sort(function(a, b) {
-    return number_(b.suggestedPurchase) - number_(a.suggestedPurchase);
+    return trackingRank_(a.trackingLevel) - trackingRank_(b.trackingLevel) ||
+      number_(b.suggestedPurchase) - number_(a.suggestedPurchase);
   }).map(function(product) {
     return [
       product.code,
@@ -476,7 +553,8 @@ function buildPurchaseReportRows_(products) {
         return sum + number_(value);
       }, 0),
       number_(product.suggestedPurchase),
-      statusLabel_(product.status)
+      statusLabel_(product.status),
+      trackingLevelLabel_(product.trackingLevel)
     ];
   });
 }
@@ -488,7 +566,7 @@ function createPurchaseReportAttachment_(analysis) {
   const sheet = temporary.getSheets()[0];
   const headers = [
     'Urun_Kodu', 'Urun_Adi', 'Guncel_Stok', 'Kritik_Esik',
-    'Uc_Aylik_Ihtiyac', 'Onerilen_Alim', 'Durum'
+    'Uc_Aylik_Ihtiyac', 'Onerilen_Alim', 'Durum', 'Takip_Seviyesi'
   ];
   const rows = buildPurchaseReportRows_(analysis.products);
   sheet.setName('Alim_Onerileri');
@@ -546,6 +624,79 @@ function runDailyAnalysisAndEmail() {
   return analysis;
 }
 
+function handleTrackingUpdate_(payload) {
+  const expectedToken = PropertiesService.getScriptProperties().getProperty('ACCESS_TOKEN');
+  if (!expectedToken) {
+    throw new Error('ACCESS_TOKEN Apps Script özelliği tanımlı değil.');
+  }
+  if (!constantTimeEqual_(clean_(payload.token), clean_(expectedToken))) {
+    throw new Error('Geçersiz erişim anahtarı.');
+  }
+  if (!Array.isArray(payload.updates) || !payload.updates.length) {
+    throw new Error('Kaydedilecek ürün seçimi bulunamadı.');
+  }
+  if (payload.updates.length > 5000) {
+    throw new Error('Tek istekte en fazla 5000 ürün güncellenebilir.');
+  }
+  const updates = payload.updates.map(function(update) {
+    const code = clean_(update && update.code);
+    if (!code) throw new Error('Ürün kodu boş olamaz.');
+    const token = trackingToken_(update.trackingLevel);
+    if (['ONCELIKLI', 'NORMAL', 'TAKIP_ETME'].indexOf(token) === -1) {
+      throw new Error('Geçersiz takip seviyesi: ' + clean_(update.trackingLevel));
+    }
+    return {
+      code: code,
+      trackingLevel: token
+    };
+  });
+  return updateTrackingLevels_(updates);
+}
+
+function constantTimeEqual_(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  let difference = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    difference |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
+function updateTrackingLevels_(updates) {
+  const sheet = getSheet_(CONFIG.SHEETS.PRODUCT_SETTINGS);
+  const values = sheet.getDataRange().getValues();
+  const rows = values.length ? values : [HEADERS.Urun_Ayarlari.slice()];
+  while (rows[0].length < HEADERS.Urun_Ayarlari.length) rows[0].push('');
+  HEADERS.Urun_Ayarlari.forEach(function(header, index) {
+    rows[0][index] = header;
+  });
+  const rowByCode = {};
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    while (rows[rowIndex].length < HEADERS.Urun_Ayarlari.length) rows[rowIndex].push('');
+    const code = clean_(rows[rowIndex][0]);
+    if (code) rowByCode[code] = rowIndex;
+  }
+  updates.forEach(function(update) {
+    let rowIndex = rowByCode[update.code];
+    if (rowIndex == null) {
+      rows.push([update.code, 30, 1, 'EVET', update.trackingLevel]);
+      rowIndex = rows.length - 1;
+      rowByCode[update.code] = rowIndex;
+    } else {
+      rows[rowIndex][4] = update.trackingLevel;
+    }
+  });
+  sheet.getRange(1, 1, rows.length, HEADERS.Urun_Ayarlari.length).setValues(
+    rows.map(function(row) {
+      return row.slice(0, HEADERS.Urun_Ayarlari.length);
+    })
+  );
+  SpreadsheetApp.flush();
+  return {updated: updates.length};
+}
+
 function createDailyAnalysisTrigger() {
   ScriptApp.getProjectTriggers().filter(function(trigger) {
     return ['sendCriticalStockAlert', 'runDailyAnalysisAndEmail'].indexOf(
@@ -579,7 +730,12 @@ function applyValidations_() {
   const yesNo = SpreadsheetApp.newDataValidation()
     .requireValueInList(['EVET', 'HAYIR'], true)
     .build();
-  getSheet_(CONFIG.SHEETS.PRODUCT_SETTINGS).getRange('D2:D').setDataValidation(yesNo);
+  const tracking = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['ONCELIKLI', 'NORMAL', 'TAKIP_ETME'], true)
+    .build();
+  const sheet = getSheet_(CONFIG.SHEETS.PRODUCT_SETTINGS);
+  sheet.getRange('D2:D').setDataValidation(yesNo);
+  sheet.getRange('E2:E').setDataValidation(tracking);
 }
 
 function getSetting_(key, fallback) {

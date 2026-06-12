@@ -98,6 +98,48 @@ test('product without sales history is marked insufficient', () => {
   assert.equal(result.suggestedPurchase, 0);
 });
 
+test('tracking levels normalize to priority, normal, or excluded', () => {
+  const app = loadCode();
+  assert.equal(app.normalizeTrackingLevel_('ÖNCELİKLİ'), 'ONCELIKLI');
+  assert.equal(app.normalizeTrackingLevel_('oncelikli'), 'ONCELIKLI');
+  assert.equal(app.normalizeTrackingLevel_('TAKIP ETME'), 'TAKIP_ETME');
+  assert.equal(app.normalizeTrackingLevel_('bilinmeyen'), 'NORMAL');
+  assert.equal(app.normalizeTrackingLevel_(''), 'NORMAL');
+});
+
+test('analysis excludes untracked products and sorts priority products first', () => {
+  const app = loadCode({
+    Utilities: {
+      formatDate(date, timezone, pattern) {
+        if (pattern === 'yyyy-MM-dd HH:mm:ss') return '2026-06-12 09:00:00';
+        return date.toISOString().slice(0, 10);
+      }
+    }
+  });
+  app.readCurrentStock_ = () => [
+    {code: 'NORMAL', name: 'Normal', stock: 2, dataDate: '2026-06-12'},
+    {code: 'EXCLUDED', name: 'Takip Etme', stock: 2, dataDate: '2026-06-12'},
+    {code: 'PRIORITY', name: 'Öncelikli', stock: 2, dataDate: '2026-06-12'}
+  ];
+  app.readMonthlySales_ = () => ({
+    NORMAL: [{quantity: 10, date: new Date(2026, 4, 1)}],
+    EXCLUDED: [{quantity: 10, date: new Date(2026, 4, 1)}],
+    PRIORITY: [{quantity: 10, date: new Date(2026, 4, 1)}]
+  });
+  app.readProductSettings_ = () => ({
+    NORMAL: {leadTime: 30, packSize: 1, active: true, trackingLevel: 'NORMAL'},
+    EXCLUDED: {leadTime: 30, packSize: 1, active: true, trackingLevel: 'TAKIP_ETME'},
+    PRIORITY: {leadTime: 30, packSize: 1, active: true, trackingLevel: 'ONCELIKLI'}
+  });
+
+  const result = app.calculateAnalysis_({now: new Date('2026-06-12T09:00:00Z')});
+
+  assert.deepEqual(Array.from(result.products, product => product.code), ['PRIORITY', 'NORMAL']);
+  assert.equal(result.products[0].trackingLevel, 'ONCELIKLI');
+  assert.equal(result.summary.totalProducts, 2);
+  assert.equal(result.summary.priorityCount, 1);
+});
+
 test('status thresholds distinguish low and normal stock', () => {
   const app = loadCode();
   assert.equal(app.stockStatus_(100, 100, true), 'critical');
@@ -124,13 +166,13 @@ test('monthly sales reader aggregates duplicate product-month rows', () => {
   assert.equal(grouped['URN-001'][0].quantity, 30);
 });
 
-test('dashboard route remains read-only', () => {
+test('dashboard GET route remains read-only while POST supports protected tracking updates', () => {
   const app = loadCode();
   app.getDashboardData_ = () => ({products: []});
 
   assert.equal(app.route_('dashboard').ok, true);
   assert.equal(app.route_('forecast').ok, false);
-  assert.equal(typeof app.doPost, 'undefined');
+  assert.equal(typeof app.doPost, 'function');
 });
 
 test('freshness detects stale, missing, and inconsistent dates', () => {
@@ -265,21 +307,62 @@ test('purchase report rows include only positive suggestions sorted descending',
   const rows = app.buildPurchaseReportRows_([
     {
       code: 'URN-LOW', name: 'Düşük', stock: 4, criticalLevel: 8,
-      months: [2, 2, 2], suggestedPurchase: 6, status: 'low'
+      months: [2, 2, 2], suggestedPurchase: 6, status: 'low',
+      trackingLevel: 'ONCELIKLI'
     },
     {
       code: 'URN-NONE', name: 'Yok', stock: 20, criticalLevel: 8,
-      months: [2, 2, 2], suggestedPurchase: 0, status: 'normal'
+      months: [2, 2, 2], suggestedPurchase: 0, status: 'normal',
+      trackingLevel: 'NORMAL'
     },
     {
       code: 'URN-HIGH', name: 'Yüksek', stock: 1, criticalLevel: 10,
-      months: [5, 5, 5], suggestedPurchase: 20, status: 'critical'
+      months: [5, 5, 5], suggestedPurchase: 20, status: 'critical',
+      trackingLevel: 'NORMAL'
     }
   ]);
 
   assert.deepEqual(Array.from(rows, row => Array.from(row)), [
-    ['URN-HIGH', 'Yüksek', 1, 10, 15, 20, 'Kritik'],
-    ['URN-LOW', 'Düşük', 4, 8, 6, 6, 'Düşük']
+    ['URN-LOW', 'Düşük', 4, 8, 6, 6, 'Düşük', 'Öncelikli'],
+    ['URN-HIGH', 'Yüksek', 1, 10, 15, 20, 'Kritik', 'Normal']
+  ]);
+});
+
+test('tracking update rejects invalid token and writes valid batch updates', () => {
+  const written = [];
+  const app = loadCode({
+    PropertiesService: {
+      getScriptProperties() {
+        return {getProperty: () => 'secret-token'};
+      }
+    }
+  });
+  app.updateTrackingLevels_ = updates => {
+    written.push(...updates);
+    return {updated: updates.length};
+  };
+
+  assert.throws(() => app.handleTrackingUpdate_({
+    token: 'wrong',
+    updates: [{code: 'URN-001', trackingLevel: 'ONCELIKLI'}]
+  }), /erişim anahtarı/i);
+  assert.throws(() => app.handleTrackingUpdate_({
+    token: 'secret-token',
+    updates: [{code: 'URN-001', trackingLevel: 'BILINMEYEN'}]
+  }), /takip seviyesi/i);
+
+  const result = app.handleTrackingUpdate_({
+    token: 'secret-token',
+    updates: [
+      {code: 'URN-001', trackingLevel: 'ÖNCELİKLİ'},
+      {code: 'URN-002', trackingLevel: 'TAKIP_ETME'}
+    ]
+  });
+
+  assert.equal(result.updated, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(written)), [
+    {code: 'URN-001', trackingLevel: 'ONCELIKLI'},
+    {code: 'URN-002', trackingLevel: 'TAKIP_ETME'}
   ]);
 });
 
@@ -372,21 +455,28 @@ test('daily trigger schedules the new analysis handler at configured time', () =
   });
 });
 
-test('browser copies expose only read-only Zirve reporting views', () => {
+test('browser copies expose tracking management and protected POST updates', () => {
   const {html, outputHtml} = sources();
   [html, outputHtml].forEach(source => {
     assert.match(source, /data-view=["']dashboard["']/);
     assert.match(source, /data-view=["']analysis["']/);
     assert.match(source, /data-view=["']forecast["']/);
+    assert.match(source, /data-view=["']tracking["']/);
     assert.match(source, /data-view=["']settings["']/);
     assert.match(source, /id=["']freshnessNotice["']/);
     assert.match(source, /id=["']analysisSearch["']/);
     assert.match(source, /id=["']analysisStatus["']/);
     assert.match(source, /id=["']analysisRows["']/);
     assert.match(source, /id=["']forecastRows["']/);
-    assert.doesNotMatch(source, /movement|orderCreate|orderStatus|accessToken/i);
+    assert.match(source, /id=["']trackingRows["']/);
+    assert.match(source, /id=["']trackingSearch["']/);
+    assert.match(source, /id=["']trackingFilter["']/);
+    assert.match(source, /id=["']saveTracking["']/);
+    assert.match(source, /id=["']accessToken["']/);
+    assert.doesNotMatch(source, /movement|orderCreate|orderStatus/i);
     assert.doesNotMatch(source, /Stok Geçmişi|Açık Siparişler/);
-    assert.doesNotMatch(source, /method:\s*["']POST["']/i);
+    assert.match(source, /method:\s*["']POST["']/i);
+    assert.match(source, /updateTrackingLevels/);
   });
 });
 

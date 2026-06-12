@@ -78,6 +78,18 @@
     }
     .notice.warning { border-color: #f5b7b1; background: #fff4f2; color: var(--red); }
     .filters { display: grid; grid-template-columns: 1fr 190px; gap: 8px; margin-bottom: 10px; }
+    .tracking-tools {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .tracking-tools .filters { flex: 1 1 420px; margin: 0; }
+    .bulk-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn.primary { background: #18181b; color: white; border-color: #18181b; }
+    .btn.primary:hover { background: #3f3f46; }
+    .priority-row td { background: #fafafa; }
+    .priority-label { font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+    .dirty-row td { box-shadow: inset 0 1px #a1a1aa, inset 0 -1px #a1a1aa; }
+    .tracking-select { min-width: 135px; }
+    .tracking-count { color: var(--muted); font-size: 12px; }
     .field, .filters input, .filters select {
       width: 100%; border: 1px solid var(--line); border-radius: 6px;
       padding: 8px 9px; background: white; color: var(--ink);
@@ -148,6 +160,7 @@
         <button class="active" data-view="dashboard">Genel Bakış</button>
         <button data-view="analysis">Stok Analizi</button>
         <button data-view="forecast">3 Aylık Alım Planı</button>
+        <button data-view="tracking">Ürün Takibi</button>
         <button data-view="settings">Veri ve Bağlantı</button>
       </nav>
       <div class="side-note">Zirve stokları ve aylık satışlardan karar desteği</div>
@@ -192,7 +205,7 @@
               <option value="veri_yetersiz">Yetersiz veri</option>
             </select>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Stok</th><th>Aylık talep</th><th>Sapma</th><th>Güvenlik stoğu</th><th>Kritik eşik</th><th>Tedarik günü</th><th>Durum</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Takip</th><th>Stok</th><th>Aylık talep</th><th>Sapma</th><th>Güvenlik stoğu</th><th>Kritik eşik</th><th>Tedarik günü</th><th>Durum</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
         </div>
       </section>
 
@@ -203,12 +216,49 @@
         </div>
       </section>
 
+      <section id="tracking" class="view">
+        <div class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>Ürün takip öncelikleri</h2>
+              <small class="sub">Öncelikli ürünleri öne alın veya istemediklerinizi analiz dışında bırakın.</small>
+            </div>
+            <button class="btn primary" id="saveTracking">Değişiklikleri Kaydet</button>
+          </div>
+          <div class="tracking-tools">
+            <div class="filters">
+              <input id="trackingSearch" placeholder="Ürün kodu veya adı ara">
+              <select id="trackingFilter">
+                <option value="">Tüm takip seviyeleri</option>
+                <option value="ONCELIKLI">Öncelikli</option>
+                <option value="NORMAL">Normal</option>
+                <option value="TAKIP_ETME">Takip etme</option>
+              </select>
+            </div>
+            <div class="bulk-actions">
+              <button class="btn" data-bulk-level="ONCELIKLI">Seçilenleri Öncelikli Yap</button>
+              <button class="btn" data-bulk-level="NORMAL">Seçilenleri Normal Yap</button>
+              <button class="btn" data-bulk-level="TAKIP_ETME">Seçilenleri Takip Etme</button>
+            </div>
+          </div>
+          <p class="tracking-count" id="trackingCount"></p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th><input type="checkbox" id="selectAllTracking"></th><th>Kod</th><th>Ürün</th><th>Durum</th><th>Takip seviyesi</th></tr></thead>
+              <tbody id="trackingRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section id="settings" class="view">
         <div class="card panel settings-card">
           <h2>Apps Script bağlantısı</h2>
           <p class="sub">Yayınlanan Apps Script web uygulamasının <code>/exec</code> adresini girin. Panel yalnızca veri okur.</p>
           <label for="apiUrl">Web uygulaması URL'si</label>
           <input class="field" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
+          <label for="accessToken" style="display:block;margin-top:12px">Yazma erişim anahtarı</label>
+          <input class="field" id="accessToken" type="password" placeholder="Apps Script ACCESS_TOKEN">
           <button class="btn" id="saveSettings" style="margin-top:12px">Kaydet ve Bağlan</button>
           <h2 style="margin-top:24px">Günlük kullanım</h2>
           <ol class="steps">
@@ -226,28 +276,38 @@
   <script>
     const demo = {
       products: [
-        {code:"URN-001",name:"Klasik Ürün",category:"Ana Grup",unit:"Adet",stock:42,dataDate:"2026-06-11",leadTime:20,packSize:10,monthlyDemand:58,demandDeviation:9.4,safetyStock:13,criticalLevel:52,months:[58,58,58],suggestedPurchase:150,status:"critical",warnings:[]},
-        {code:"URN-002",name:"Mevsimlik Ürün",category:"Sezon",unit:"Adet",stock:78,dataDate:"2026-06-11",leadTime:30,packSize:12,monthlyDemand:62,demandDeviation:12.2,safetyStock:21,criticalLevel:83,months:[62,62,62],suggestedPurchase:132,status:"critical",warnings:[]},
-        {code:"URN-003",name:"Premium Ürün",category:"Ana Grup",unit:"Adet",stock:118,dataDate:"2026-06-11",leadTime:14,packSize:6,monthlyDemand:42,demandDeviation:5.1,safetyStock:6,criticalLevel:26,months:[42,42,42],suggestedPurchase:18,status:"normal",warnings:[]},
-        {code:"URN-004",name:"Yeni Ürün",category:"Yeni",unit:"Adet",stock:25,dataDate:"2026-06-11",leadTime:30,packSize:1,monthlyDemand:0,demandDeviation:0,safetyStock:0,criticalLevel:0,months:[0,0,0],suggestedPurchase:0,status:"veri_yetersiz",warnings:["Aylık satış geçmişi bulunamadı."]}
+        {code:"URN-001",name:"Klasik Ürün",category:"Ana Grup",unit:"Adet",stock:42,dataDate:"2026-06-11",leadTime:20,packSize:10,monthlyDemand:58,demandDeviation:9.4,safetyStock:13,criticalLevel:52,months:[58,58,58],suggestedPurchase:150,status:"critical",trackingLevel:"ONCELIKLI",warnings:[]},
+        {code:"URN-002",name:"Mevsimlik Ürün",category:"Sezon",unit:"Adet",stock:78,dataDate:"2026-06-11",leadTime:30,packSize:12,monthlyDemand:62,demandDeviation:12.2,safetyStock:21,criticalLevel:83,months:[62,62,62],suggestedPurchase:132,status:"critical",trackingLevel:"NORMAL",warnings:[]},
+        {code:"URN-003",name:"Premium Ürün",category:"Ana Grup",unit:"Adet",stock:118,dataDate:"2026-06-11",leadTime:14,packSize:6,monthlyDemand:42,demandDeviation:5.1,safetyStock:6,criticalLevel:26,months:[42,42,42],suggestedPurchase:18,status:"normal",trackingLevel:"NORMAL",warnings:[]}
       ],
-      summary:{totalProducts:4,criticalCount:2,lowCount:0,insufficientCount:1,purchaseTotal:300},
+      trackingProducts:[
+        {code:"URN-001",name:"Klasik Ürün",trackingLevel:"ONCELIKLI",active:true,status:"critical"},
+        {code:"URN-002",name:"Mevsimlik Ürün",trackingLevel:"NORMAL",active:true,status:"critical"},
+        {code:"URN-003",name:"Premium Ürün",trackingLevel:"NORMAL",active:true,status:"normal"},
+        {code:"URN-004",name:"Yeni Ürün",trackingLevel:"TAKIP_ETME",active:true,status:"veri_yetersiz"}
+      ],
+      summary:{totalProducts:3,priorityCount:1,criticalCount:2,lowCount:0,insufficientCount:0,purchaseTotal:300},
       freshness:{latestDate:"2026-06-11",missing:false,inconsistent:false,stale:false,message:"Zirve verisi güncel."},
       calculatedAt:"2026-06-11 09:00:00"
     };
 
     const state = {
       data: structuredClone(demo),
-      apiUrl: localStorage.getItem("stockApiUrl") || ""
+      apiUrl: localStorage.getItem("stockApiUrl") || "",
+      accessToken: localStorage.getItem("stockAccessToken") || "",
+      trackingChanges: new Map(),
+      selectedTracking: new Set()
     };
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
     const fmt = value => new Intl.NumberFormat("tr-TR",{maximumFractionDigits:2}).format(Number(value)||0);
     const statusText = {normal:"Normal",low:"Düşük",critical:"Kritik",veri_yetersiz:"Yetersiz veri"};
+    const trackingText = {ONCELIKLI:"Öncelikli",NORMAL:"Normal",TAKIP_ETME:"Takip etme"};
     const titles = {
       dashboard:["Genel Bakış","Kritik stoklar ve üç aylık alım ihtiyacı."],
       analysis:["Stok Analizi","Otomatik kritik eşikler ve güvenlik stokları."],
       forecast:["3 Aylık Alım Planı","Önümüzdeki üç ay için önerilen ürün adetleri."],
+      tracking:["Ürün Takibi","Takip kapsamını ve ürün önceliklerini yönetin."],
       settings:["Veri ve Bağlantı","Zirve aktarımı ve Apps Script bağlantısı."]
     };
 
@@ -280,13 +340,14 @@
 
       const critical = products.filter(product => product.status==="critical");
       $("criticalRows").innerHTML = critical.map(product =>
-        `<tr><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small></td><td>${fmt(product.stock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt((product.months||[]).reduce((a,b)=>a+Number(b||0),0))}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
+        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small>${product.trackingLevel==="ONCELIKLI"?`<br><span class="priority-label">ÖNCELİKLİ</span>`:""}</td><td>${fmt(product.stock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt((product.months||[]).reduce((a,b)=>a+Number(b||0),0))}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
       ).join("") || emptyRow(5,"Kritik ürün bulunmuyor.");
       $("alerts").innerHTML = critical.map(product =>
         `<div class="alert"><strong>${esc(product.name)}</strong><small>Stok ${fmt(product.stock)} · Kritik eşik ${fmt(product.criticalLevel)} · Alım ${fmt(product.suggestedPurchase)}</small></div>`
       ).join("") || `<p class="empty">Kritik stok uyarısı yok.</p>`;
       renderAnalysis();
       renderForecast();
+      renderTracking();
     }
     function renderAnalysis() {
       const query = $("analysisSearch").value.toLocaleLowerCase("tr");
@@ -296,14 +357,51 @@
         (!status || product.status===status)
       );
       $("analysisRows").innerHTML = rows.map(product =>
-        `<tr><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${fmt(product.stock)}</td><td>${fmt(product.monthlyDemand)}</td><td>${fmt(product.demandDeviation)}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt(product.leadTime)}</td><td>${badge(product.status)}</td></tr>`
-      ).join("") || emptyRow(9);
+        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${esc(trackingText[product.trackingLevel]||"Normal")}</td><td>${fmt(product.stock)}</td><td>${fmt(product.monthlyDemand)}</td><td>${fmt(product.demandDeviation)}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt(product.leadTime)}</td><td>${badge(product.status)}</td></tr>`
+      ).join("") || emptyRow(10);
     }
     function renderForecast() {
-      const rows = (state.data.products||[]).slice().sort((a,b)=>Number(b.suggestedPurchase)-Number(a.suggestedPurchase));
+      const rank = value => value==="ONCELIKLI"?0:1;
+      const rows = (state.data.products||[]).slice().sort((a,b)=>
+        rank(a.trackingLevel)-rank(b.trackingLevel) ||
+        Number(b.suggestedPurchase)-Number(a.suggestedPurchase)
+      );
       $("forecastRows").innerHTML = rows.map(product =>
-        `<tr><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small></td><td>${fmt(product.months?.[0])}</td><td>${fmt(product.months?.[1])}</td><td>${fmt(product.months?.[2])}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.stock)}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
+        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small>${product.trackingLevel==="ONCELIKLI"?`<br><span class="priority-label">ÖNCELİKLİ</span>`:""}</td><td>${fmt(product.months?.[0])}</td><td>${fmt(product.months?.[1])}</td><td>${fmt(product.months?.[2])}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.stock)}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
       ).join("") || emptyRow(7);
+    }
+    function trackingLevelFor(product) {
+      return state.trackingChanges.get(product.code) || product.trackingLevel || "NORMAL";
+    }
+    function trackingOptions(selected) {
+      return Object.entries(trackingText).map(([value,label]) =>
+        `<option value="${value}" ${selected===value?"selected":""}>${label}</option>`
+      ).join("");
+    }
+    function renderTracking() {
+      const query = $("trackingSearch").value.toLocaleLowerCase("tr");
+      const filter = $("trackingFilter").value;
+      const rows = (state.data.trackingProducts||state.data.products||[]).filter(product => {
+        const level = trackingLevelFor(product);
+        return (!query || `${product.code} ${product.name}`.toLocaleLowerCase("tr").includes(query)) &&
+          (!filter || level===filter);
+      });
+      $("trackingCount").textContent =
+        `${rows.length} ürün gösteriliyor · ${state.trackingChanges.size} kaydedilmemiş değişiklik`;
+      $("trackingRows").innerHTML = rows.map(product => {
+        const level = trackingLevelFor(product);
+        const checked = state.selectedTracking.has(product.code);
+        const dirty = state.trackingChanges.has(product.code);
+        return `<tr class="${level==="ONCELIKLI"?"priority-row ":""}${dirty?"dirty-row":""}">
+          <td><input class="tracking-check" type="checkbox" data-code="${esc(product.code)}" ${checked?"checked":""}></td>
+          <td>${esc(product.code)}</td>
+          <td><strong>${esc(product.name)}</strong></td>
+          <td>${badge(product.status||"normal")}</td>
+          <td><select class="field tracking-select" data-tracking-code="${esc(product.code)}">${trackingOptions(level)}</select></td>
+        </tr>`;
+      }).join("") || emptyRow(5);
+      $("selectAllTracking").checked = rows.length > 0 &&
+        rows.every(product => state.selectedTracking.has(product.code));
     }
     async function api(action) {
       if (!state.apiUrl) throw new Error("API adresi tanımlı değil.");
@@ -312,6 +410,38 @@
       url.searchParams.set("_",Date.now());
       const response = await fetch(url);
       return response.json();
+    }
+    async function postApi(payload) {
+      if (!state.apiUrl) throw new Error("API adresi tanımlı değil.");
+      if (!state.accessToken) throw new Error("Yazma erişim anahtarı tanımlı değil.");
+      const response = await fetch(state.apiUrl,{
+        method:"POST",
+        headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({...payload,token:state.accessToken})
+      });
+      return response.json();
+    }
+    async function saveTrackingChanges() {
+      const updates = Array.from(state.trackingChanges,([code,trackingLevel]) => ({
+        code,trackingLevel
+      }));
+      if (!updates.length) {
+        toast("Kaydedilecek değişiklik yok.");
+        return;
+      }
+      $("saveTracking").disabled = true;
+      try {
+        const result = await postApi({action:"updateTrackingLevels",updates});
+        if (!result.ok) throw new Error(result.error||"Takip seviyeleri kaydedilemedi.");
+        state.trackingChanges.clear();
+        state.selectedTracking.clear();
+        await loadData(false);
+        toast(`${result.data.updated} ürünün takip seviyesi kaydedildi.`);
+      } catch (error) {
+        toast(`Kaydetme hatası: ${error.message}`);
+      } finally {
+        $("saveTracking").disabled = false;
+      }
     }
     async function loadData(showMessage=true) {
       if (!state.apiUrl) {
@@ -335,11 +465,47 @@
     document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click",()=>showView(button.dataset.go)));
     $("analysisSearch").addEventListener("input",renderAnalysis);
     $("analysisStatus").addEventListener("change",renderAnalysis);
+    $("trackingSearch").addEventListener("input",renderTracking);
+    $("trackingFilter").addEventListener("change",renderTracking);
+    $("trackingRows").addEventListener("change",event=>{
+      const select = event.target.closest("[data-tracking-code]");
+      const checkbox = event.target.closest(".tracking-check");
+      if (select) {
+        state.trackingChanges.set(select.dataset.trackingCode,select.value);
+        renderTracking();
+      }
+      if (checkbox) {
+        checkbox.checked ?
+          state.selectedTracking.add(checkbox.dataset.code) :
+          state.selectedTracking.delete(checkbox.dataset.code);
+        renderTracking();
+      }
+    });
+    $("selectAllTracking").addEventListener("change",event=>{
+      document.querySelectorAll(".tracking-check").forEach(checkbox=>{
+        event.target.checked ?
+          state.selectedTracking.add(checkbox.dataset.code) :
+          state.selectedTracking.delete(checkbox.dataset.code);
+      });
+      renderTracking();
+    });
+    document.querySelectorAll("[data-bulk-level]").forEach(button=>button.addEventListener("click",()=>{
+      if (!state.selectedTracking.size) {
+        toast("Önce ürün seçin.");
+        return;
+      }
+      state.selectedTracking.forEach(code=>state.trackingChanges.set(code,button.dataset.bulkLevel));
+      renderTracking();
+    }));
+    $("saveTracking").addEventListener("click",saveTrackingChanges);
     $("refreshBtn").addEventListener("click",()=>loadData());
     $("apiUrl").value = state.apiUrl;
+    $("accessToken").value = state.accessToken;
     $("saveSettings").addEventListener("click",async()=>{
       state.apiUrl = $("apiUrl").value.trim();
+      state.accessToken = $("accessToken").value.trim();
       localStorage.setItem("stockApiUrl",state.apiUrl);
+      localStorage.setItem("stockAccessToken",state.accessToken);
       await loadData();
       showView("dashboard");
     });

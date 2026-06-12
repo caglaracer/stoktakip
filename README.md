@@ -7,6 +7,7 @@ Uygulama stok veya sipariş kaydı oluşturmaz. Amacı:
 - Kritik stok seviyelerini otomatik hesaplamak
 - Önümüzdeki üç ayın ürün ihtiyacını tahmin etmek
 - Paket miktarına göre önerilen alım adetlerini göstermek
+- Ürünleri öncelikli, normal veya takip dışı olarak yönetmek
 - Her gün ayarlanabilir saatte e-posta özeti göndermek
 
 ## Dosyalar

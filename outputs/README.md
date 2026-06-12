@@ -53,13 +53,27 @@ Gerekli sütunlar:
 
 `Urun_Ayarlari` sekmesinde her ürün için:
 
-| Urun_Kodu | Tedarik_Suresi_Gun | Paket_Miktari | Aktif |
-|---|---:|---:|---|
-| URN-001 | 30 | 12 | EVET |
+| Urun_Kodu | Tedarik_Suresi_Gun | Paket_Miktari | Aktif | Takip_Seviyesi |
+|---|---:|---:|---|---|
+| URN-001 | 30 | 12 | EVET | ONCELIKLI |
 
 - `Tedarik_Suresi_Gun`: Siparişten teslimata ortalama gün
 - `Paket_Miktari`: Alım önerisinin yuvarlanacağı koli/paket adedi
 - `Aktif`: `EVET` veya `HAYIR`
+- `Takip_Seviyesi`: `ONCELIKLI`, `NORMAL` veya `TAKIP_ETME`
+
+`ONCELIKLI` ürünler panel, e-posta ve Excel raporunda üstte gösterilir.
+`TAKIP_ETME` ürünleri analiz, alım önerisi ve günlük e-postadan çıkarılır.
+
+### Panelden takip seviyesi değiştirme
+
+1. Apps Script proje ayarlarında **Komut dosyası özellikleri** bölümünü açın.
+2. `ACCESS_TOKEN` adlı bir özellik ekleyip tahmin edilmesi zor bir değer belirleyin.
+3. Web panelindeki **Veri ve Bağlantı** ekranına aynı değeri yazın.
+4. **Ürün Takibi** ekranından ürünleri seçip seviyelerini değiştirin.
+5. **Değişiklikleri Kaydet** düğmesine basın.
+
+Takip seçimleri `Urun_Ayarlari` sekmesine kalıcı olarak kaydedilir.
 
 Ürün ayarı bulunmazsa sistem geçici olarak `30` gün ve paket miktarı `1` kullanır ve panelde uyarı gösterir.
 
@@ -102,6 +116,9 @@ miktarına göre büyükten küçüğe sıralanır.
 3. **Erişimi olanlar:** Herkes.
 4. Sonu `/exec` ile biten adresi alın.
 5. GitHub Pages panelinde **Veri ve Bağlantı** ekranına bu adresi girin.
+
+Takip seviyesi yazma özelliği eklendikten sonra web uygulamasını yeni sürümle
+yeniden dağıtmanız gerekir.
 
 Panel yalnızca `GET?action=dashboard` ile veri okur. Erişim anahtarı veya yazma işlemi yoktur.
 
