@@ -102,6 +102,29 @@ test('history coverage counts complete source months without confusing zero sale
   assert.equal(app.availableHistoryMonths_(sales, '2026-06'), 8);
 });
 
+test('demand classification prioritizes insufficient dormant and manual rules', () => {
+  const app = loadCode();
+  assert.equal(app.classifyDemand_({availableMonths: 11}), 'YETERSIZ_VERI');
+  assert.equal(app.classifyDemand_({
+    availableMonths: 36, nonZeroMonthCount: 3, monthsSinceLastSale: 24,
+    adi: 12, cv2: 0, lag12Correlation: 0.9
+  }), 'HAREKETSIZ');
+  assert.equal(app.classifyDemand_({
+    availableMonths: 36, nonZeroMonthCount: 1, monthsSinceLastSale: 23,
+    adi: 36, cv2: 0, lag12Correlation: null
+  }), 'MANUEL_TAKIP');
+});
+
+test('demand classification separates seasonal smooth erratic intermittent and lumpy', () => {
+  const app = loadCode();
+  const base = {availableMonths: 36, nonZeroMonthCount: 12, monthsSinceLastSale: 0};
+  assert.equal(app.classifyDemand_({...base, adi: 3, cv2: 0.2, lag12Correlation: 0.7}), 'MEVSIMSEL');
+  assert.equal(app.classifyDemand_({...base, adi: 1.1, cv2: 0.2, lag12Correlation: 0.1}), 'DUZENLI');
+  assert.equal(app.classifyDemand_({...base, adi: 1.1, cv2: 0.7, lag12Correlation: 0.1}), 'DEGISKEN');
+  assert.equal(app.classifyDemand_({...base, adi: 2, cv2: 0.2, lag12Correlation: 0.1}), 'KESIKLI');
+  assert.equal(app.classifyDemand_({...base, adi: 2, cv2: 0.7, lag12Correlation: 0.1}), 'YIGINSAL');
+});
+
 test('product analysis calculates threshold, status, and pack-rounded purchase', () => {
   const app = loadCode();
   const stock = {code: 'URN-001', name: 'Test', stock: 50, dataDate: '2026-06-11'};

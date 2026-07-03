@@ -325,6 +325,56 @@ function availableHistoryMonths_(salesByProduct, startMonth) {
   return Math.max(0, Math.min(36, startOrdinal - earliest));
 }
 
+function correlation_(left, right) {
+  if (left.length !== right.length || left.length < 2) return null;
+  const leftMean = left.reduce(function(sum, value) {
+    return sum + number_(value);
+  }, 0) / left.length;
+  const rightMean = right.reduce(function(sum, value) {
+    return sum + number_(value);
+  }, 0) / right.length;
+  let numerator = 0;
+  let leftSquare = 0;
+  let rightSquare = 0;
+  left.forEach(function(value, index) {
+    const a = number_(value) - leftMean;
+    const b = number_(right[index]) - rightMean;
+    numerator += a * b;
+    leftSquare += a * a;
+    rightSquare += b * b;
+  });
+  const denominator = Math.sqrt(leftSquare * rightSquare);
+  return denominator ? numerator / denominator : null;
+}
+
+function lag12Correlation_(series) {
+  if (series.length < 24) return null;
+  const quantities = series.map(function(row) {
+    return number_(row.quantity);
+  });
+  return correlation_(
+    quantities.slice(0, quantities.length - 12),
+    quantities.slice(12)
+  );
+}
+
+function classifyDemand_(metrics) {
+  if (number_(metrics.availableMonths) < 12) return 'YETERSIZ_VERI';
+  if (metrics.monthsSinceLastSale == null || number_(metrics.monthsSinceLastSale) >= 24) {
+    return 'HAREKETSIZ';
+  }
+  if (number_(metrics.nonZeroMonthCount) <= 2) return 'MANUEL_TAKIP';
+  if (number_(metrics.availableMonths) >= 24 &&
+      metrics.lag12Correlation != null &&
+      number_(metrics.lag12Correlation) >= 0.50) {
+    return 'MEVSIMSEL';
+  }
+  if (number_(metrics.adi) < 1.32) {
+    return number_(metrics.cv2) < 0.49 ? 'DUZENLI' : 'DEGISKEN';
+  }
+  return number_(metrics.cv2) < 0.49 ? 'KESIKLI' : 'YIGINSAL';
+}
+
 function readCurrentStock_() {
   return rowsAsObjects_(getSheet_(CONFIG.SHEETS.STOCK)).filter(function(row) {
     return clean_(row.Urun_Kodu);
