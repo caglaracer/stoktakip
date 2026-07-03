@@ -335,11 +335,29 @@ test('alert time parser accepts HH:mm and falls back to 09:00', () => {
   );
 });
 
-test('analysis writer replaces rows and writes all fourteen columns', () => {
+test('product settings reader includes manual minimum stock', () => {
+  const app = loadCode();
+  app.getSheet_ = () => ({});
+  app.rowsAsObjects_ = () => [{
+    Urun_Kodu: 'URN-001',
+    Tedarik_Suresi_Gun: 45,
+    Paket_Miktari: 6,
+    Aktif: 'EVET',
+    Takip_Seviyesi: 'ONCELIKLI',
+    Minimum_Stok: 7
+  }];
+
+  const settings = app.readProductSettings_();
+
+  assert.equal(settings['URN-001'].minimumStock, 7);
+  assert.equal(settings['URN-001'].leadTime, 45);
+});
+
+test('analysis writer replaces rows and writes all extended columns', () => {
   const calls = [];
   const sheet = {
     getLastRow: () => 4,
-    getLastColumn: () => 14,
+    getLastColumn: () => 19,
     getRange(row, column, rows, columns) {
       return {
         clearContent() {
@@ -365,12 +383,50 @@ test('analysis writer replaces rows and writes all fourteen columns', () => {
   });
 
   assert.deepEqual(calls[0], {
-    type: 'clear', row: 2, column: 1, rows: 3, columns: 14
+    type: 'clear', row: 2, column: 1, rows: 3, columns: 19
   });
   assert.equal(calls[1].type, 'write');
   assert.equal(calls[1].values.length, 1);
-  assert.equal(calls[1].values[0].length, 14);
+  assert.equal(calls[1].values[0].length, 19);
   assert.equal(calls[1].values[0][1], 'URN-001');
+});
+
+test('analysis writer serializes nullable threshold and forecast explanation fields', () => {
+  const calls = [];
+  const sheet = {
+    getLastRow: () => 2,
+    getLastColumn: () => 19,
+    getRange(row, column, rows, columns) {
+      return {
+        clearContent() {
+          calls.push({type: 'clear', row, column, rows, columns});
+        },
+        setValues(values) {
+          calls.push({type: 'write', row, column, rows, columns, values});
+        }
+      };
+    }
+  };
+  const app = loadCode();
+  app.getSheet_ = () => sheet;
+
+  app.writeAnalysis_({
+    calculatedAt: '2026-06-11 09:00:00',
+    products: [{
+      code: 'URN-001', name: 'Urun', stock: 10, monthlyDemand: 0,
+      demandDeviation: 0, safetyStock: 0, criticalLevel: null,
+      months: [0, 0, 0], suggestedPurchase: 0, status: 'manuel_takip',
+      dataDate: '2026-06-10', demandClass: 'MANUEL_TAKIP',
+      lastSaleDate: '2024-06', nonZeroMonthCount: 1,
+      monthsSinceLastSale: 23, forecastExplanation: 'Cok seyrek.'
+    }]
+  });
+
+  assert.equal(calls[1].values[0].length, 19);
+  assert.equal(calls[1].values[0][7], '');
+  assert.deepEqual(Array.from(calls[1].values[0].slice(14)), [
+    'MANUEL_TAKIP', '2024-06', 1, 23, 'Cok seyrek.'
+  ]);
 });
 
 test('daily email includes a compact summary and attachment note', () => {

@@ -15,13 +15,15 @@ const HEADERS = Object.freeze({
   Guncel_Stok: ['Urun_Kodu', 'Urun_Adi', 'Kategori', 'Birim', 'Guncel_Stok', 'Veri_Tarihi'],
   Aylik_Satislar: ['Yil', 'Ay', 'Urun_Kodu', 'Satis_Miktari'],
   Urun_Ayarlari: [
-    'Urun_Kodu', 'Tedarik_Suresi_Gun', 'Paket_Miktari', 'Aktif', 'Takip_Seviyesi'
+    'Urun_Kodu', 'Tedarik_Suresi_Gun', 'Paket_Miktari',
+    'Aktif', 'Takip_Seviyesi', 'Minimum_Stok'
   ],
   Analiz: [
     'Hesaplama_Tarihi', 'Urun_Kodu', 'Urun_Adi', 'Guncel_Stok',
     'Aylik_Talep', 'Talep_Sapmasi', 'Guvenlik_Stogu', 'Kritik_Esik',
     'Ay_1_Tahmin', 'Ay_2_Tahmin', 'Ay_3_Tahmin', 'Onerilen_Alim',
-    'Durum', 'Veri_Tarihi'
+    'Durum', 'Veri_Tarihi', 'Tahmin_Sinifi', 'Son_Satis_Tarihi',
+    'Pozitif_Satis_Ayi', 'Son_Satistan_Beri_Ay', 'Tahmin_Aciklamasi'
   ],
   Ayarlar: ['Ayar', 'Deger', 'Aciklama']
 });
@@ -603,6 +605,7 @@ function readProductSettings_() {
       packSize: number_(row.Paket_Miktari) || 1,
       active: clean_(row.Aktif || 'EVET').toUpperCase() !== 'HAYIR',
       trackingLevel: normalizeTrackingLevel_(row.Takip_Seviyesi),
+      minimumStock: Math.max(0, number_(row.Minimum_Stok)),
       missing: false
     };
   });
@@ -670,13 +673,18 @@ function writeAnalysis_(analysis) {
       product.monthlyDemand,
       product.demandDeviation,
       product.safetyStock,
-      product.criticalLevel,
+      product.criticalLevel == null ? '' : product.criticalLevel,
       product.months[0],
       product.months[1],
       product.months[2],
       product.suggestedPurchase,
       product.status,
-      product.dataDate
+      product.dataDate,
+      product.demandClass,
+      product.lastSaleDate,
+      product.nonZeroMonthCount,
+      product.monthsSinceLastSale,
+      product.forecastExplanation
     ];
   });
   if (rows.length) {
@@ -975,7 +983,7 @@ function updateTrackingLevels_(updates) {
   updates.forEach(function(update) {
     let rowIndex = rowByCode[update.code];
     if (rowIndex == null) {
-      rows.push([update.code, 30, 1, 'EVET', update.trackingLevel]);
+      rows.push([update.code, 30, 1, 'EVET', update.trackingLevel, '']);
       rowIndex = rows.length - 1;
       rowByCode[update.code] = rowIndex;
     } else {
