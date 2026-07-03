@@ -90,19 +90,27 @@ function calculateAnalysis_(request) {
   const stocks = readCurrentStock_();
   const sales = readMonthlySales_();
   const settings = readProductSettings_();
+  const analysisRequest = request || {};
+  const startMonth = analysisRequest.startMonth ||
+    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').slice(0, 7);
+  const availableMonths = availableHistoryMonths_(sales, startMonth);
   const allProducts = stocks.map(function(stock) {
     const productSettings = settings[stock.code] || {
       leadTime: 30,
       packSize: 1,
       active: true,
       trackingLevel: 'NORMAL',
+      minimumStock: 0,
       missing: true
     };
     return analyzeProduct_(
       stock,
       sales[stock.code] || [],
       productSettings,
-      request || {}
+      Object.assign({}, analysisRequest, {
+        startMonth: startMonth,
+        availableMonths: availableMonths
+      })
     );
   });
   const products = allProducts.filter(function(product) {
@@ -127,6 +135,8 @@ function calculateAnalysis_(request) {
       }).length,
       criticalCount: products.filter(function(p) { return p.status === 'critical'; }).length,
       lowCount: products.filter(function(p) { return p.status === 'low'; }).length,
+      manualCount: products.filter(function(p) { return p.status === 'manuel_takip'; }).length,
+      dormantCount: products.filter(function(p) { return p.status === 'hareketsiz'; }).length,
       insufficientCount: products.filter(function(p) { return p.status === 'veri_yetersiz'; }).length,
       purchaseTotal: products.reduce(function(sum, p) { return sum + p.suggestedPurchase; }, 0)
     },
@@ -138,6 +148,72 @@ function calculateAnalysis_(request) {
 function analyzeProduct_(stock, history, settings, request) {
   const active = settings.active !== false;
   const trackingLevel = normalizeTrackingLevel_(settings.trackingLevel);
+  const startMonth = request && request.startMonth ? request.startMonth :
+    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').slice(0, 7);
+  const series = buildMonthlySeries_(history, startMonth, 36);
+  const metrics = calculateDemandMetrics_(series);
+  metrics.availableMonths = request && request.availableMonths != null ?
+    number_(request.availableMonths) : 36;
+  metrics.lag12Correlation = lag12Correlation_(series);
+  const demandClass = classifyDemand_(metrics);
+  const forecast = forecastDemand_(demandClass, series, startMonth);
+  const automatic = ['HAREKETSIZ', 'MANUEL_TAKIP', 'YETERSIZ_VERI'].indexOf(demandClass) === -1;
+  const monthlyDemand = automatic ? forecast.months[0] : 0;
+  const variabilityValues = demandClass === 'KESIKLI' || demandClass === 'YIGINSAL' ?
+    forecast.errors :
+    series.slice(-12).map(function(row) { return row.quantity; });
+  const demandDeviation = automatic ? populationStdDev_(variabilityValues) : 0;
+  const leadTimeMonths = Math.max(0, number_(settings.leadTime)) / 30;
+  const safetyStock = automatic ?
+    CONFIG.SERVICE_LEVEL_Z * demandDeviation * Math.sqrt(leadTimeMonths) : 0;
+  const modelThreshold = automatic ? monthlyDemand * leadTimeMonths + safetyStock : null;
+  const manualMinimum = Math.max(0, number_(settings.minimumStock));
+  const criticalLevel = manualMinimum > 0 ?
+    Math.max(number_(modelThreshold), manualMinimum) :
+    modelThreshold;
+  const status = stockStatus_(number_(stock.stock), criticalLevel, demandClass);
+  const months = forecast.months;
+  const statisticalShortage = automatic ?
+    months.reduce(function(sum, value) { return sum + number_(value); }, 0) +
+    safetyStock - number_(stock.stock) : 0;
+  const manualShortage = manualMinimum > 0 ? manualMinimum - number_(stock.stock) : 0;
+  const suggestedPurchase = roundToPack_(
+    Math.max(0, statisticalShortage, manualShortage),
+    settings.packSize
+  );
+  const warnings = [];
+  if (settings.missing) warnings.push('Urun ayari bulunamadi; 30 gun ve paket 1 kullanildi.');
+  if (demandClass === 'YETERSIZ_VERI') warnings.push('Aylik satis gecmisi yetersiz.');
+  if (manualMinimum > 0) warnings.push('Manuel minimum stok kurali uygulandi.');
+  const explanation = forecast.forecastExplanation || forecast.explanation ||
+    demandClassExplanation_(demandClass, manualMinimum);
+  return {
+    code: stock.code,
+    name: stock.name,
+    category: stock.category,
+    unit: stock.unit,
+    stock: number_(stock.stock),
+    dataDate: stock.dataDate,
+    leadTime: number_(settings.leadTime) || 30,
+    packSize: number_(settings.packSize) || 1,
+    active: active,
+    trackingLevel: trackingLevel,
+    settingsMissing: !!settings.missing,
+    monthlyDemand: round_(monthlyDemand, 2),
+    demandDeviation: round_(demandDeviation, 2),
+    safetyStock: round_(safetyStock, 2),
+    criticalLevel: criticalLevel == null ? null : round_(criticalLevel, 2),
+    months: months.map(function(value) { return round_(value, 2); }),
+    suggestedPurchase: suggestedPurchase,
+    status: status,
+    demandClass: demandClass,
+    lastSaleDate: metrics.lastSaleDate,
+    nonZeroMonthCount: metrics.nonZeroMonthCount,
+    monthsSinceLastSale: metrics.monthsSinceLastSale,
+    forecastExplanation: explanation,
+    warnings: warnings
+  };
+  {
   const recent = history.slice().sort(function(a, b) {
     return b.date - a.date;
   }).slice(0, 12);
@@ -180,6 +256,8 @@ function analyzeProduct_(stock, history, settings, request) {
   };
 }
 
+}
+
 function trackingToken_(value) {
   return clean_(value)
     .toLocaleUpperCase('tr-TR')
@@ -212,11 +290,30 @@ function compareProductPriority_(a, b) {
     clean_(a.name).localeCompare(clean_(b.name), 'tr');
 }
 
-function stockStatus_(stock, criticalLevel, hasHistory) {
-  if (!hasHistory) return 'veri_yetersiz';
+function stockStatus_(stock, criticalLevel, demandClass) {
+  if (demandClass === false) return 'veri_yetersiz';
+  if (criticalLevel == null) {
+    if (demandClass === 'MANUEL_TAKIP') return 'manuel_takip';
+    if (demandClass === 'HAREKETSIZ') return 'hareketsiz';
+    return 'veri_yetersiz';
+  }
   if (stock <= criticalLevel) return 'critical';
   if (stock <= criticalLevel * 1.25) return 'low';
   return 'normal';
+}
+
+function demandClassExplanation_(demandClass, manualMinimum) {
+  const suffix = manualMinimum > 0 ? ' Manuel minimum stok kurali uygulandi.' : '';
+  return ({
+    YETERSIZ_VERI: 'Yeterli aylik satis gecmisi yok; otomatik alim onerisi olusturulmadi.',
+    HAREKETSIZ: 'Son 24 ayda satis yok; otomatik alim onerisi olusturulmadi.',
+    MANUEL_TAKIP: 'Cok seyrek satis var; otomatik kritik esik olusturulmadi.',
+    MEVSIMSEL: 'Mevsimsel talep: gecmis yillarin ayni aylari kullanildi.',
+    DUZENLI: 'Duzenli talep: son 12 ay agirlikli ortalamasi kullanildi.',
+    DEGISKEN: 'Degisken talep: son 12 ay agirlikli ortalamasi kullanildi.',
+    KESIKLI: 'Seyrek talep: TSB tahmini kullanildi.',
+    YIGINSAL: 'Seyrek ve oynak talep: TSB tahmini kullanildi.'
+  }[demandClass] || 'Talep sinifi belirlenemedi.') + suffix;
 }
 
 function weightedAverage_(rows) {

@@ -152,42 +152,77 @@ test('regular forecast preserves decimals until final purchasing', () => {
   assert.notEqual(result.months[0], Math.ceil(result.months[0]));
 });
 
-test('product analysis calculates threshold, status, and pack-rounded purchase', () => {
+test('product analysis calculates hybrid threshold, status, and pack-rounded purchase', () => {
   const app = loadCode();
   const stock = {code: 'URN-001', name: 'Test', stock: 50, dataDate: '2026-06-11'};
-  const history = [
-    {year: 2026, month: 5, quantity: 100, date: new Date(2026, 4, 1)},
-    {year: 2026, month: 4, quantity: 80, date: new Date(2026, 3, 1)},
-    {year: 2026, month: 3, quantity: 60, date: new Date(2026, 2, 1)}
-  ];
+  const history = Array.from({length: 36}, (_, index) => {
+    const date = new Date(2023, 5 + index, 1);
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      quantity: 10,
+      date
+    };
+  });
 
   const result = app.analyzeProduct_(stock, history, {
     leadTime: 30,
     packSize: 12,
     active: true,
     missing: false
-  }, {model: 'weighted', startMonth: '2026-06'});
+  }, {model: 'weighted', startMonth: '2026-06', availableMonths: 36});
 
-  assert.equal(result.monthlyDemand, 83);
-  assert.equal(result.safetyStock, 27);
-  assert.equal(result.criticalLevel, 110);
-  assert.equal(result.status, 'critical');
-  assert.deepEqual(Array.from(result.months), [83, 83, 83]);
-  assert.equal(result.suggestedPurchase, 228);
+  assert.equal(result.demandClass, 'DUZENLI');
+  assert.equal(result.monthlyDemand, 10);
+  assert.equal(result.safetyStock, 0);
+  assert.equal(result.criticalLevel, 10);
+  assert.equal(result.status, 'normal');
+  assert.deepEqual(Array.from(result.months), [10, 10, 10]);
+  assert.equal(result.suggestedPurchase, 0);
 });
 
-test('product without sales history is marked insufficient', () => {
+test('product without source history is marked insufficient', () => {
   const app = loadCode();
   const result = app.analyzeProduct_(
     {code: 'URN-002', name: 'Yeni', stock: 20, dataDate: '2026-06-11'},
     [],
     {leadTime: 20, packSize: 1, active: true, missing: false},
-    {model: 'weighted', startMonth: '2026-06'}
+    {model: 'weighted', startMonth: '2026-06', availableMonths: 0}
   );
 
   assert.equal(result.status, 'veri_yetersiz');
+  assert.equal(result.demandClass, 'YETERSIZ_VERI');
   assert.equal(result.monthlyDemand, 0);
   assert.equal(result.suggestedPurchase, 0);
+});
+
+test('sparse product has no false critical threshold or purchase recommendation', () => {
+  const app = loadCode();
+  const result = app.analyzeProduct_(
+    {code: 'R900571012', name: '4WE 6 R6X/EG24N9K4', stock: 2, dataDate: '2026-06-12'},
+    [{year: 2024, month: 6, quantity: 2, date: new Date(2024, 5, 1)}],
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-06', availableMonths: 36}
+  );
+  assert.equal(result.demandClass, 'MANUEL_TAKIP');
+  assert.equal(result.criticalLevel, null);
+  assert.equal(result.status, 'manuel_takip');
+  assert.equal(result.suggestedPurchase, 0);
+  assert.equal(result.lastSaleDate, '2024-06');
+});
+
+test('manual minimum stock creates threshold and package-rounded shortage', () => {
+  const app = loadCode();
+  const result = app.analyzeProduct_(
+    {code: 'SPARE', name: 'Strategic spare', stock: 2, dataDate: '2026-06-12'},
+    [],
+    {leadTime: 30, packSize: 4, minimumStock: 7, active: true, missing: false},
+    {startMonth: '2026-06', availableMonths: 36}
+  );
+  assert.equal(result.demandClass, 'HAREKETSIZ');
+  assert.equal(result.criticalLevel, 7);
+  assert.equal(result.status, 'critical');
+  assert.equal(result.suggestedPurchase, 8);
 });
 
 test('tracking levels normalize to priority, normal, or excluded', () => {
