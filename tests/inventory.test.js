@@ -528,7 +528,7 @@ test('tracking update rejects invalid token and writes valid batch updates', () 
   assert.throws(() => app.handleTrackingUpdate_({
     token: 'wrong',
     updates: [{code: 'URN-001', trackingLevel: 'ONCELIKLI'}]
-  }), /erişim anahtarı/i);
+  }), /erisim anahtari/i);
   assert.throws(() => app.handleTrackingUpdate_({
     token: 'secret-token',
     updates: [{code: 'URN-001', trackingLevel: 'BILINMEYEN'}]
@@ -547,6 +547,87 @@ test('tracking update rejects invalid token and writes valid batch updates', () 
     {code: 'URN-001', trackingLevel: 'ONCELIKLI'},
     {code: 'URN-002', trackingLevel: 'TAKIP_ETME'}
   ]);
+});
+
+test('analysis export requires token and preserves requested code order', () => {
+  const app = loadCode({
+    PropertiesService: {
+      getScriptProperties: () => ({getProperty: () => 'secret'})
+    }
+  });
+  app.getDashboardData_ = () => ({
+    calculatedAt: '2026-06-12 10:00:00',
+    products: [
+      {code: 'A', name: 'Alpha'},
+      {code: 'B', name: 'Beta'}
+    ]
+  });
+  app.createFilteredAnalysisReport_ = (analysis, products) => ({
+    fileName: 'Stok_Analizi_2026-06-12.xlsx',
+    base64: 'ZmFrZQ==',
+    codes: products.map(product => product.code)
+  });
+
+  assert.throws(() => app.handleAnalysisExport_({
+    token: 'wrong', codes: ['B']
+  }), /erisim anahtari/i);
+  const result = app.handleAnalysisExport_({
+    token: 'secret', codes: ['B', 'A', 'B', 'UNKNOWN']
+  });
+  assert.deepEqual(Array.from(result.codes), ['B', 'A']);
+});
+
+test('filtered analysis report writes trusted rows and returns base64 xlsx', () => {
+  const calls = [];
+  const trashed = [];
+  const sheet = {
+    setName(name) { calls.push({type: 'name', name}); },
+    getRange(row, column, rows, columns) {
+      return {
+        setValues(values) { calls.push({type: 'values', row, column, rows, columns, values}); return this; },
+        setBackground() { return this; },
+        setFontColor() { return this; },
+        setFontWeight() { return this; },
+        setNumberFormat() { return this; }
+      };
+    },
+    setFrozenRows(rows) { calls.push({type: 'frozen', rows}); },
+    autoResizeColumns(column, columns) { calls.push({type: 'resize', column, columns}); }
+  };
+  const app = loadCode({
+    SpreadsheetApp: {
+      create() { return {getId: () => 'temp-1', getSheets: () => [sheet]}; },
+      flush() {}
+    },
+    UrlFetchApp: {
+      fetch() {
+        return {
+          getResponseCode: () => 200,
+          getContent: () => Buffer.from('xlsx-bytes')
+        };
+      }
+    },
+    ScriptApp: {getOAuthToken: () => 'oauth'},
+    Utilities: {base64Encode: bytes => Buffer.from(bytes).toString('base64')},
+    DriveApp: {getFileById: id => ({setTrashed: value => trashed.push({id, value})})}
+  });
+
+  const result = app.createFilteredAnalysisReport_({
+    calculatedAt: '2026-06-12 10:00:00'
+  }, [{
+    code: 'B', name: 'Beta', stock: 2, demandClass: 'MANUEL_TAKIP',
+    criticalLevel: null, suggestedPurchase: 0, lastSaleDate: '2024-06',
+    forecastExplanation: 'Cok seyrek.'
+  }]);
+
+  const dataRows = calls.find(call => call.type === 'values' && call.row === 2).values;
+  assert.equal(result.fileName, 'Stok_Analizi_2026-06-12.xlsx');
+  assert.equal(result.mimeType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(result.base64, Buffer.from('xlsx-bytes').toString('base64'));
+  assert.deepEqual(Array.from(dataRows[0]), [
+    'B', 'Beta', 2, 'Manuel takip', '', 0, '2024-06', 'Cok seyrek.'
+  ]);
+  assert.deepEqual(trashed, [{id: 'temp-1', value: true}]);
 });
 
 test('daily analysis email sends xlsx attachment and trashes temporary spreadsheet', () => {

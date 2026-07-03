@@ -52,6 +52,14 @@ function doPost(e) {
     const payload = JSON.parse(
       e && e.postData && e.postData.contents ? e.postData.contents : '{}'
     );
+    switch (payload.action) {
+      case 'updateTrackingLevels':
+        return json_({ok: true, data: handleTrackingUpdate_(payload)});
+      case 'exportAnalysis':
+        return json_({ok: true, data: handleAnalysisExport_(payload)});
+      default:
+        throw new Error('Gecersiz yazma islemi.');
+    }
     if (payload.action !== 'updateTrackingLevels') {
       throw new Error('Geçersiz yazma işlemi.');
     }
@@ -839,6 +847,19 @@ function trackingLevelLabel_(level) {
   }[normalizeTrackingLevel_(level)];
 }
 
+function demandClassLabel_(demandClass) {
+  return {
+    YETERSIZ_VERI: 'Yetersiz veri',
+    HAREKETSIZ: 'Hareketsiz',
+    MANUEL_TAKIP: 'Manuel takip',
+    MEVSIMSEL: 'Mevsimsel',
+    DUZENLI: 'Duzenli',
+    DEGISKEN: 'Degisken',
+    KESIKLI: 'Kesikli',
+    YIGINSAL: 'Yiginsal'
+  }[demandClass] || clean_(demandClass);
+}
+
 function buildPurchaseReportRows_(products) {
   return products.filter(function(product) {
     return number_(product.suggestedPurchase) > 0;
@@ -900,6 +921,66 @@ function createPurchaseReportAttachment_(analysis) {
   };
 }
 
+function buildFilteredAnalysisReportRows_(products) {
+  return products.map(function(product) {
+    return [
+      product.code,
+      product.name,
+      number_(product.stock),
+      demandClassLabel_(product.demandClass),
+      product.criticalLevel == null ? '' : number_(product.criticalLevel),
+      number_(product.suggestedPurchase),
+      product.lastSaleDate,
+      product.forecastExplanation
+    ];
+  });
+}
+
+function createFilteredAnalysisReport_(analysis, products) {
+  const dateLabel = String(analysis.calculatedAt || '').slice(0, 10);
+  const fileName = 'Stok_Analizi_' + dateLabel + '.xlsx';
+  const temporary = SpreadsheetApp.create('Stok Pusulasi Gecici Analiz ' + dateLabel);
+  let temporaryFileId = temporary.getId();
+  try {
+    const sheet = temporary.getSheets()[0];
+    const headers = [
+      'Urun_Kodu', 'Urun_Adi', 'Guncel_Stok', 'Tahmin_Sinifi',
+      'Kritik_Esik', 'Onerilen_Alim', 'Son_Satis_Tarihi', 'Aciklama'
+    ];
+    const rows = buildFilteredAnalysisReportRows_(products);
+    sheet.setName('Stok_Analizi');
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+      .setBackground('#171717')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold');
+    if (rows.length) {
+      sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+      sheet.getRange(2, 3, rows.length, 3).setNumberFormat('#,##0.00');
+    }
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, headers.length);
+    SpreadsheetApp.flush();
+
+    const response = UrlFetchApp.fetch(
+      'https://docs.google.com/spreadsheets/d/' + temporaryFileId + '/export?format=xlsx',
+      {
+        headers: {Authorization: 'Bearer ' + ScriptApp.getOAuthToken()},
+        muteHttpExceptions: true
+      }
+    );
+    if (response.getResponseCode() !== 200) {
+      throw new Error('Excel raporu olusturulamadi: HTTP ' + response.getResponseCode());
+    }
+    return {
+      fileName: fileName,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: Utilities.base64Encode(response.getContent())
+    };
+  } finally {
+    trashTemporaryReport_(temporaryFileId);
+  }
+}
+
 function trashTemporaryReport_(fileId) {
   if (fileId) DriveApp.getFileById(fileId).setTrashed(true);
 }
@@ -926,7 +1007,49 @@ function runDailyAnalysisAndEmail() {
   return analysis;
 }
 
+function requireAccessToken_(token) {
+  const expectedToken = PropertiesService.getScriptProperties().getProperty('ACCESS_TOKEN');
+  if (!expectedToken) {
+    throw new Error('ACCESS_TOKEN Apps Script ozelligi tanimli degil.');
+  }
+  if (!constantTimeEqual_(clean_(token), clean_(expectedToken))) {
+    throw new Error('Gecersiz erisim anahtari.');
+  }
+}
+
+function handleAnalysisExport_(payload) {
+  requireAccessToken_(payload.token);
+  if (!Array.isArray(payload.codes) || !payload.codes.length) {
+    throw new Error('Excel icin urun secimi bulunamadi.');
+  }
+  if (payload.codes.length > 5000) {
+    throw new Error('Tek istekte en fazla 5000 urun indirilebilir.');
+  }
+  const seen = {};
+  const requestedCodes = [];
+  payload.codes.forEach(function(value) {
+    const code = clean_(value);
+    if (code && !seen[code]) {
+      seen[code] = true;
+      requestedCodes.push(code);
+    }
+  });
+  const analysis = getDashboardData_();
+  const byCode = {};
+  analysis.products.forEach(function(product) {
+    byCode[product.code] = product;
+  });
+  const products = requestedCodes.map(function(code) {
+    return byCode[code];
+  }).filter(Boolean);
+  if (!products.length) {
+    throw new Error('Excel icin gecerli urun bulunamadi.');
+  }
+  return createFilteredAnalysisReport_(analysis, products);
+}
+
 function handleTrackingUpdate_(payload) {
+  requireAccessToken_(payload.token);
   const expectedToken = PropertiesService.getScriptProperties().getProperty('ACCESS_TOKEN');
   if (!expectedToken) {
     throw new Error('ACCESS_TOKEN Apps Script özelliği tanımlı değil.');
