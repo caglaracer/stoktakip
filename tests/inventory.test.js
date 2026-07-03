@@ -60,42 +60,169 @@ test('population deviation and safety stock use demand variability', () => {
   assert.equal(app.calculateSafetyStock_([10, 20, 30], 30), 14);
 });
 
-test('product analysis calculates threshold, status, and pack-rounded purchase', () => {
+test('monthly series contains the latest 36 complete months with zero-filled gaps', () => {
+  const app = loadCode();
+  const series = app.buildMonthlySeries_([
+    {year: 2024, month: 6, quantity: 2, date: new Date(2024, 5, 1)}
+  ], '2026-06', 36);
+
+  assert.equal(series.length, 36);
+  assert.deepEqual(
+    {year: series[0].year, month: series[0].month},
+    {year: 2023, month: 6}
+  );
+  assert.deepEqual(
+    {year: series[35].year, month: series[35].month},
+    {year: 2026, month: 5}
+  );
+  assert.equal(series.find(row => row.year === 2024 && row.month === 6).quantity, 2);
+  assert.equal(series.filter(row => row.quantity > 0).length, 1);
+});
+
+test('demand metrics calculate non-zero months ADI CV2 and last sale age', () => {
+  const app = loadCode();
+  const series = app.buildMonthlySeries_([
+    {year: 2024, month: 6, quantity: 2, date: new Date(2024, 5, 1)}
+  ], '2026-06', 36);
+  const metrics = app.calculateDemandMetrics_(series);
+
+  assert.equal(metrics.nonZeroMonthCount, 1);
+  assert.equal(metrics.monthsSinceLastSale, 23);
+  assert.equal(metrics.lastSaleDate, '2024-06');
+  assert.equal(metrics.adi, 36);
+  assert.equal(metrics.cv2, 0);
+});
+
+test('history coverage counts complete source months without confusing zero sales', () => {
+  const app = loadCode();
+  const sales = {
+    A: [{year: 2025, month: 10, quantity: 1}],
+    B: [{year: 2026, month: 5, quantity: 2}]
+  };
+  assert.equal(app.availableHistoryMonths_(sales, '2026-06'), 8);
+});
+
+test('demand classification prioritizes insufficient dormant and manual rules', () => {
+  const app = loadCode();
+  assert.equal(app.classifyDemand_({availableMonths: 11}), 'YETERSIZ_VERI');
+  assert.equal(app.classifyDemand_({
+    availableMonths: 36, nonZeroMonthCount: 3, monthsSinceLastSale: 24,
+    adi: 12, cv2: 0, lag12Correlation: 0.9
+  }), 'HAREKETSIZ');
+  assert.equal(app.classifyDemand_({
+    availableMonths: 36, nonZeroMonthCount: 1, monthsSinceLastSale: 23,
+    adi: 36, cv2: 0, lag12Correlation: null
+  }), 'MANUEL_TAKIP');
+});
+
+test('demand classification separates seasonal smooth erratic intermittent and lumpy', () => {
+  const app = loadCode();
+  const base = {availableMonths: 36, nonZeroMonthCount: 12, monthsSinceLastSale: 0};
+  assert.equal(app.classifyDemand_({...base, adi: 3, cv2: 0.2, lag12Correlation: 0.7}), 'MEVSIMSEL');
+  assert.equal(app.classifyDemand_({...base, adi: 1.1, cv2: 0.2, lag12Correlation: 0.1}), 'DUZENLI');
+  assert.equal(app.classifyDemand_({...base, adi: 1.1, cv2: 0.7, lag12Correlation: 0.1}), 'DEGISKEN');
+  assert.equal(app.classifyDemand_({...base, adi: 2, cv2: 0.2, lag12Correlation: 0.1}), 'KESIKLI');
+  assert.equal(app.classifyDemand_({...base, adi: 2, cv2: 0.7, lag12Correlation: 0.1}), 'YIGINSAL');
+});
+
+test('seasonal forecast weights matching calendar months 3 2 1', () => {
+  const app = loadCode();
+  const series = app.buildMonthlySeries_([
+    {year: 2023, month: 6, quantity: 10},
+    {year: 2024, month: 6, quantity: 20},
+    {year: 2025, month: 6, quantity: 40}
+  ], '2026-06', 36);
+  const forecast = app.seasonalForecast_(series, '2026-06', 3);
+  assert.ok(Math.abs(forecast.months[0] - 28.3333333) < 0.0001);
+});
+
+test('TSB forecast decays demand probability across zero months', () => {
+  const app = loadCode();
+  const result = app.tsbForecast_([10, 0, 0, 0], 0.20, 0.10);
+  assert.ok(result.forecast > 0);
+  assert.ok(result.forecast < 10);
+  assert.equal(result.errors.length, 4);
+});
+
+test('regular forecast preserves decimals until final purchasing', () => {
+  const app = loadCode();
+  const result = app.forecastDemand_('DUZENLI', [
+    {quantity: 1}, {quantity: 2}, {quantity: 2}
+  ], '2026-06');
+  assert.notEqual(result.months[0], Math.ceil(result.months[0]));
+});
+
+test('product analysis calculates hybrid threshold, status, and pack-rounded purchase', () => {
   const app = loadCode();
   const stock = {code: 'URN-001', name: 'Test', stock: 50, dataDate: '2026-06-11'};
-  const history = [
-    {year: 2026, month: 5, quantity: 100, date: new Date(2026, 4, 1)},
-    {year: 2026, month: 4, quantity: 80, date: new Date(2026, 3, 1)},
-    {year: 2026, month: 3, quantity: 60, date: new Date(2026, 2, 1)}
-  ];
+  const history = Array.from({length: 36}, (_, index) => {
+    const date = new Date(2023, 5 + index, 1);
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      quantity: 10,
+      date
+    };
+  });
 
   const result = app.analyzeProduct_(stock, history, {
     leadTime: 30,
     packSize: 12,
     active: true,
     missing: false
-  }, {model: 'weighted', startMonth: '2026-06'});
+  }, {model: 'weighted', startMonth: '2026-06', availableMonths: 36});
 
-  assert.equal(result.monthlyDemand, 83);
-  assert.equal(result.safetyStock, 27);
-  assert.equal(result.criticalLevel, 110);
-  assert.equal(result.status, 'critical');
-  assert.deepEqual(Array.from(result.months), [83, 83, 83]);
-  assert.equal(result.suggestedPurchase, 228);
+  assert.equal(result.demandClass, 'DUZENLI');
+  assert.equal(result.monthlyDemand, 10);
+  assert.equal(result.safetyStock, 0);
+  assert.equal(result.criticalLevel, 10);
+  assert.equal(result.status, 'normal');
+  assert.deepEqual(Array.from(result.months), [10, 10, 10]);
+  assert.equal(result.suggestedPurchase, 0);
 });
 
-test('product without sales history is marked insufficient', () => {
+test('product without source history is marked insufficient', () => {
   const app = loadCode();
   const result = app.analyzeProduct_(
     {code: 'URN-002', name: 'Yeni', stock: 20, dataDate: '2026-06-11'},
     [],
     {leadTime: 20, packSize: 1, active: true, missing: false},
-    {model: 'weighted', startMonth: '2026-06'}
+    {model: 'weighted', startMonth: '2026-06', availableMonths: 0}
   );
 
   assert.equal(result.status, 'veri_yetersiz');
+  assert.equal(result.demandClass, 'YETERSIZ_VERI');
   assert.equal(result.monthlyDemand, 0);
   assert.equal(result.suggestedPurchase, 0);
+});
+
+test('sparse product has no false critical threshold or purchase recommendation', () => {
+  const app = loadCode();
+  const result = app.analyzeProduct_(
+    {code: 'R900571012', name: '4WE 6 R6X/EG24N9K4', stock: 2, dataDate: '2026-06-12'},
+    [{year: 2024, month: 6, quantity: 2, date: new Date(2024, 5, 1)}],
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-06', availableMonths: 36}
+  );
+  assert.equal(result.demandClass, 'MANUEL_TAKIP');
+  assert.equal(result.criticalLevel, null);
+  assert.equal(result.status, 'manuel_takip');
+  assert.equal(result.suggestedPurchase, 0);
+  assert.equal(result.lastSaleDate, '2024-06');
+});
+
+test('manual minimum stock creates threshold and package-rounded shortage', () => {
+  const app = loadCode();
+  const result = app.analyzeProduct_(
+    {code: 'SPARE', name: 'Strategic spare', stock: 2, dataDate: '2026-06-12'},
+    [],
+    {leadTime: 30, packSize: 4, minimumStock: 7, active: true, missing: false},
+    {startMonth: '2026-06', availableMonths: 36}
+  );
+  assert.equal(result.demandClass, 'HAREKETSIZ');
+  assert.equal(result.criticalLevel, 7);
+  assert.equal(result.status, 'critical');
+  assert.equal(result.suggestedPurchase, 8);
 });
 
 test('tracking levels normalize to priority, normal, or excluded', () => {
@@ -208,11 +335,29 @@ test('alert time parser accepts HH:mm and falls back to 09:00', () => {
   );
 });
 
-test('analysis writer replaces rows and writes all fourteen columns', () => {
+test('product settings reader includes manual minimum stock', () => {
+  const app = loadCode();
+  app.getSheet_ = () => ({});
+  app.rowsAsObjects_ = () => [{
+    Urun_Kodu: 'URN-001',
+    Tedarik_Suresi_Gun: 45,
+    Paket_Miktari: 6,
+    Aktif: 'EVET',
+    Takip_Seviyesi: 'ONCELIKLI',
+    Minimum_Stok: 7
+  }];
+
+  const settings = app.readProductSettings_();
+
+  assert.equal(settings['URN-001'].minimumStock, 7);
+  assert.equal(settings['URN-001'].leadTime, 45);
+});
+
+test('analysis writer replaces rows and writes all extended columns', () => {
   const calls = [];
   const sheet = {
     getLastRow: () => 4,
-    getLastColumn: () => 14,
+    getLastColumn: () => 19,
     getRange(row, column, rows, columns) {
       return {
         clearContent() {
@@ -238,12 +383,50 @@ test('analysis writer replaces rows and writes all fourteen columns', () => {
   });
 
   assert.deepEqual(calls[0], {
-    type: 'clear', row: 2, column: 1, rows: 3, columns: 14
+    type: 'clear', row: 2, column: 1, rows: 3, columns: 19
   });
   assert.equal(calls[1].type, 'write');
   assert.equal(calls[1].values.length, 1);
-  assert.equal(calls[1].values[0].length, 14);
+  assert.equal(calls[1].values[0].length, 19);
   assert.equal(calls[1].values[0][1], 'URN-001');
+});
+
+test('analysis writer serializes nullable threshold and forecast explanation fields', () => {
+  const calls = [];
+  const sheet = {
+    getLastRow: () => 2,
+    getLastColumn: () => 19,
+    getRange(row, column, rows, columns) {
+      return {
+        clearContent() {
+          calls.push({type: 'clear', row, column, rows, columns});
+        },
+        setValues(values) {
+          calls.push({type: 'write', row, column, rows, columns, values});
+        }
+      };
+    }
+  };
+  const app = loadCode();
+  app.getSheet_ = () => sheet;
+
+  app.writeAnalysis_({
+    calculatedAt: '2026-06-11 09:00:00',
+    products: [{
+      code: 'URN-001', name: 'Urun', stock: 10, monthlyDemand: 0,
+      demandDeviation: 0, safetyStock: 0, criticalLevel: null,
+      months: [0, 0, 0], suggestedPurchase: 0, status: 'manuel_takip',
+      dataDate: '2026-06-10', demandClass: 'MANUEL_TAKIP',
+      lastSaleDate: '2024-06', nonZeroMonthCount: 1,
+      monthsSinceLastSale: 23, forecastExplanation: 'Cok seyrek.'
+    }]
+  });
+
+  assert.equal(calls[1].values[0].length, 19);
+  assert.equal(calls[1].values[0][7], '');
+  assert.deepEqual(Array.from(calls[1].values[0].slice(14)), [
+    'MANUEL_TAKIP', '2024-06', 1, 23, 'Cok seyrek.'
+  ]);
 });
 
 test('daily email includes a compact summary and attachment note', () => {
@@ -253,7 +436,7 @@ test('daily email includes a compact summary and attachment note', () => {
     freshness: {latestDate: '2026-06-10'},
     summary: {
       totalProducts: 2, criticalCount: 0, lowCount: 1,
-      insufficientCount: 0, purchaseTotal: 24
+      insufficientCount: 0, manualCount: 3, dormantCount: 4, purchaseTotal: 24
     },
     products: [
       {
@@ -272,6 +455,8 @@ test('daily email includes a compact summary and attachment note', () => {
   assert.match(email.body, /24/);
   assert.match(email.body, /2026-06-10/);
   assert.match(email.body, /Excel/i);
+  assert.match(email.body, /Manuel takip: 3/i);
+  assert.match(email.body, /Hareketsiz: 4/i);
   assert.doesNotMatch(email.body, /URN-002/);
   assert.match(email.htmlBody, /Stok Pusulası/);
 });
@@ -328,6 +513,19 @@ test('purchase report rows include only positive suggestions sorted descending',
   ]);
 });
 
+test('purchase report serializes nullable critical level as blank', () => {
+  const app = loadCode();
+  const rows = app.buildPurchaseReportRows_([
+    {
+      code: 'MANUAL', name: 'Manual', stock: 1, criticalLevel: null,
+      months: [0, 0, 0], suggestedPurchase: 4, status: 'critical',
+      trackingLevel: 'NORMAL'
+    }
+  ]);
+
+  assert.equal(rows[0][3], '');
+});
+
 test('tracking update rejects invalid token and writes valid batch updates', () => {
   const written = [];
   const app = loadCode({
@@ -345,7 +543,7 @@ test('tracking update rejects invalid token and writes valid batch updates', () 
   assert.throws(() => app.handleTrackingUpdate_({
     token: 'wrong',
     updates: [{code: 'URN-001', trackingLevel: 'ONCELIKLI'}]
-  }), /erişim anahtarı/i);
+  }), /erisim anahtari/i);
   assert.throws(() => app.handleTrackingUpdate_({
     token: 'secret-token',
     updates: [{code: 'URN-001', trackingLevel: 'BILINMEYEN'}]
@@ -364,6 +562,87 @@ test('tracking update rejects invalid token and writes valid batch updates', () 
     {code: 'URN-001', trackingLevel: 'ONCELIKLI'},
     {code: 'URN-002', trackingLevel: 'TAKIP_ETME'}
   ]);
+});
+
+test('analysis export requires token and preserves requested code order', () => {
+  const app = loadCode({
+    PropertiesService: {
+      getScriptProperties: () => ({getProperty: () => 'secret'})
+    }
+  });
+  app.getDashboardData_ = () => ({
+    calculatedAt: '2026-06-12 10:00:00',
+    products: [
+      {code: 'A', name: 'Alpha'},
+      {code: 'B', name: 'Beta'}
+    ]
+  });
+  app.createFilteredAnalysisReport_ = (analysis, products) => ({
+    fileName: 'Stok_Analizi_2026-06-12.xlsx',
+    base64: 'ZmFrZQ==',
+    codes: products.map(product => product.code)
+  });
+
+  assert.throws(() => app.handleAnalysisExport_({
+    token: 'wrong', codes: ['B']
+  }), /erisim anahtari/i);
+  const result = app.handleAnalysisExport_({
+    token: 'secret', codes: ['B', 'A', 'B', 'UNKNOWN']
+  });
+  assert.deepEqual(Array.from(result.codes), ['B', 'A']);
+});
+
+test('filtered analysis report writes trusted rows and returns base64 xlsx', () => {
+  const calls = [];
+  const trashed = [];
+  const sheet = {
+    setName(name) { calls.push({type: 'name', name}); },
+    getRange(row, column, rows, columns) {
+      return {
+        setValues(values) { calls.push({type: 'values', row, column, rows, columns, values}); return this; },
+        setBackground() { return this; },
+        setFontColor() { return this; },
+        setFontWeight() { return this; },
+        setNumberFormat() { return this; }
+      };
+    },
+    setFrozenRows(rows) { calls.push({type: 'frozen', rows}); },
+    autoResizeColumns(column, columns) { calls.push({type: 'resize', column, columns}); }
+  };
+  const app = loadCode({
+    SpreadsheetApp: {
+      create() { return {getId: () => 'temp-1', getSheets: () => [sheet]}; },
+      flush() {}
+    },
+    UrlFetchApp: {
+      fetch() {
+        return {
+          getResponseCode: () => 200,
+          getContent: () => Buffer.from('xlsx-bytes')
+        };
+      }
+    },
+    ScriptApp: {getOAuthToken: () => 'oauth'},
+    Utilities: {base64Encode: bytes => Buffer.from(bytes).toString('base64')},
+    DriveApp: {getFileById: id => ({setTrashed: value => trashed.push({id, value})})}
+  });
+
+  const result = app.createFilteredAnalysisReport_({
+    calculatedAt: '2026-06-12 10:00:00'
+  }, [{
+    code: 'B', name: 'Beta', stock: 2, demandClass: 'MANUEL_TAKIP',
+    criticalLevel: null, suggestedPurchase: 0, lastSaleDate: '2024-06',
+    forecastExplanation: 'Cok seyrek.'
+  }]);
+
+  const dataRows = calls.find(call => call.type === 'values' && call.row === 2).values;
+  assert.equal(result.fileName, 'Stok_Analizi_2026-06-12.xlsx');
+  assert.equal(result.mimeType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(result.base64, Buffer.from('xlsx-bytes').toString('base64'));
+  assert.deepEqual(Array.from(dataRows[0]), [
+    'B', 'Beta', 2, 'Manuel takip', '', 0, '2024-06', 'Cok seyrek.'
+  ]);
+  assert.deepEqual(trashed, [{id: 'temp-1', value: true}]);
 });
 
 test('daily analysis email sends xlsx attachment and trashes temporary spreadsheet', () => {
@@ -466,6 +745,10 @@ test('browser copies expose tracking management and protected POST updates', () 
     assert.match(source, /id=["']freshnessNotice["']/);
     assert.match(source, /id=["']analysisSearch["']/);
     assert.match(source, /id=["']analysisStatus["']/);
+    assert.match(source, /id=["']analysisTracking["']/);
+    assert.match(source, /id=["']downloadAnalysis["']/);
+    assert.match(source, /id=["']manualCount["']/);
+    assert.match(source, /id=["']dormantCount["']/);
     assert.match(source, /id=["']analysisRows["']/);
     assert.match(source, /id=["']forecastRows["']/);
     assert.match(source, /id=["']trackingRows["']/);
@@ -477,6 +760,10 @@ test('browser copies expose tracking management and protected POST updates', () 
     assert.doesNotMatch(source, /Stok Geçmişi|Açık Siparişler/);
     assert.match(source, /method:\s*["']POST["']/i);
     assert.match(source, /updateTrackingLevels/);
+    assert.match(source, /exportAnalysis/);
+    assert.match(source, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
+    assert.match(source, /manuel_takip/);
+    assert.match(source, /hareketsiz/);
   });
 });
 

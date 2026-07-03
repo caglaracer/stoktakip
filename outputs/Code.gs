@@ -15,13 +15,15 @@ const HEADERS = Object.freeze({
   Guncel_Stok: ['Urun_Kodu', 'Urun_Adi', 'Kategori', 'Birim', 'Guncel_Stok', 'Veri_Tarihi'],
   Aylik_Satislar: ['Yil', 'Ay', 'Urun_Kodu', 'Satis_Miktari'],
   Urun_Ayarlari: [
-    'Urun_Kodu', 'Tedarik_Suresi_Gun', 'Paket_Miktari', 'Aktif', 'Takip_Seviyesi'
+    'Urun_Kodu', 'Tedarik_Suresi_Gun', 'Paket_Miktari',
+    'Aktif', 'Takip_Seviyesi', 'Minimum_Stok'
   ],
   Analiz: [
     'Hesaplama_Tarihi', 'Urun_Kodu', 'Urun_Adi', 'Guncel_Stok',
     'Aylik_Talep', 'Talep_Sapmasi', 'Guvenlik_Stogu', 'Kritik_Esik',
     'Ay_1_Tahmin', 'Ay_2_Tahmin', 'Ay_3_Tahmin', 'Onerilen_Alim',
-    'Durum', 'Veri_Tarihi'
+    'Durum', 'Veri_Tarihi', 'Tahmin_Sinifi', 'Son_Satis_Tarihi',
+    'Pozitif_Satis_Ayi', 'Son_Satistan_Beri_Ay', 'Tahmin_Aciklamasi'
   ],
   Ayarlar: ['Ayar', 'Deger', 'Aciklama']
 });
@@ -50,6 +52,14 @@ function doPost(e) {
     const payload = JSON.parse(
       e && e.postData && e.postData.contents ? e.postData.contents : '{}'
     );
+    switch (payload.action) {
+      case 'updateTrackingLevels':
+        return json_({ok: true, data: handleTrackingUpdate_(payload)});
+      case 'exportAnalysis':
+        return json_({ok: true, data: handleAnalysisExport_(payload)});
+      default:
+        throw new Error('Gecersiz yazma islemi.');
+    }
     if (payload.action !== 'updateTrackingLevels') {
       throw new Error('Geçersiz yazma işlemi.');
     }
@@ -90,19 +100,27 @@ function calculateAnalysis_(request) {
   const stocks = readCurrentStock_();
   const sales = readMonthlySales_();
   const settings = readProductSettings_();
+  const analysisRequest = request || {};
+  const startMonth = analysisRequest.startMonth ||
+    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').slice(0, 7);
+  const availableMonths = availableHistoryMonths_(sales, startMonth);
   const allProducts = stocks.map(function(stock) {
     const productSettings = settings[stock.code] || {
       leadTime: 30,
       packSize: 1,
       active: true,
       trackingLevel: 'NORMAL',
+      minimumStock: 0,
       missing: true
     };
     return analyzeProduct_(
       stock,
       sales[stock.code] || [],
       productSettings,
-      request || {}
+      Object.assign({}, analysisRequest, {
+        startMonth: startMonth,
+        availableMonths: availableMonths
+      })
     );
   });
   const products = allProducts.filter(function(product) {
@@ -127,6 +145,8 @@ function calculateAnalysis_(request) {
       }).length,
       criticalCount: products.filter(function(p) { return p.status === 'critical'; }).length,
       lowCount: products.filter(function(p) { return p.status === 'low'; }).length,
+      manualCount: products.filter(function(p) { return p.status === 'manuel_takip'; }).length,
+      dormantCount: products.filter(function(p) { return p.status === 'hareketsiz'; }).length,
       insufficientCount: products.filter(function(p) { return p.status === 'veri_yetersiz'; }).length,
       purchaseTotal: products.reduce(function(sum, p) { return sum + p.suggestedPurchase; }, 0)
     },
@@ -138,6 +158,72 @@ function calculateAnalysis_(request) {
 function analyzeProduct_(stock, history, settings, request) {
   const active = settings.active !== false;
   const trackingLevel = normalizeTrackingLevel_(settings.trackingLevel);
+  const startMonth = request && request.startMonth ? request.startMonth :
+    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').slice(0, 7);
+  const series = buildMonthlySeries_(history, startMonth, 36);
+  const metrics = calculateDemandMetrics_(series);
+  metrics.availableMonths = request && request.availableMonths != null ?
+    number_(request.availableMonths) : 36;
+  metrics.lag12Correlation = lag12Correlation_(series);
+  const demandClass = classifyDemand_(metrics);
+  const forecast = forecastDemand_(demandClass, series, startMonth);
+  const automatic = ['HAREKETSIZ', 'MANUEL_TAKIP', 'YETERSIZ_VERI'].indexOf(demandClass) === -1;
+  const monthlyDemand = automatic ? forecast.months[0] : 0;
+  const variabilityValues = demandClass === 'KESIKLI' || demandClass === 'YIGINSAL' ?
+    forecast.errors :
+    series.slice(-12).map(function(row) { return row.quantity; });
+  const demandDeviation = automatic ? populationStdDev_(variabilityValues) : 0;
+  const leadTimeMonths = Math.max(0, number_(settings.leadTime)) / 30;
+  const safetyStock = automatic ?
+    CONFIG.SERVICE_LEVEL_Z * demandDeviation * Math.sqrt(leadTimeMonths) : 0;
+  const modelThreshold = automatic ? monthlyDemand * leadTimeMonths + safetyStock : null;
+  const manualMinimum = Math.max(0, number_(settings.minimumStock));
+  const criticalLevel = manualMinimum > 0 ?
+    Math.max(number_(modelThreshold), manualMinimum) :
+    modelThreshold;
+  const status = stockStatus_(number_(stock.stock), criticalLevel, demandClass);
+  const months = forecast.months;
+  const statisticalShortage = automatic ?
+    months.reduce(function(sum, value) { return sum + number_(value); }, 0) +
+    safetyStock - number_(stock.stock) : 0;
+  const manualShortage = manualMinimum > 0 ? manualMinimum - number_(stock.stock) : 0;
+  const suggestedPurchase = roundToPack_(
+    Math.max(0, statisticalShortage, manualShortage),
+    settings.packSize
+  );
+  const warnings = [];
+  if (settings.missing) warnings.push('Urun ayari bulunamadi; 30 gun ve paket 1 kullanildi.');
+  if (demandClass === 'YETERSIZ_VERI') warnings.push('Aylik satis gecmisi yetersiz.');
+  if (manualMinimum > 0) warnings.push('Manuel minimum stok kurali uygulandi.');
+  const explanation = forecast.forecastExplanation || forecast.explanation ||
+    demandClassExplanation_(demandClass, manualMinimum);
+  return {
+    code: stock.code,
+    name: stock.name,
+    category: stock.category,
+    unit: stock.unit,
+    stock: number_(stock.stock),
+    dataDate: stock.dataDate,
+    leadTime: number_(settings.leadTime) || 30,
+    packSize: number_(settings.packSize) || 1,
+    active: active,
+    trackingLevel: trackingLevel,
+    settingsMissing: !!settings.missing,
+    monthlyDemand: round_(monthlyDemand, 2),
+    demandDeviation: round_(demandDeviation, 2),
+    safetyStock: round_(safetyStock, 2),
+    criticalLevel: criticalLevel == null ? null : round_(criticalLevel, 2),
+    months: months.map(function(value) { return round_(value, 2); }),
+    suggestedPurchase: suggestedPurchase,
+    status: status,
+    demandClass: demandClass,
+    lastSaleDate: metrics.lastSaleDate,
+    nonZeroMonthCount: metrics.nonZeroMonthCount,
+    monthsSinceLastSale: metrics.monthsSinceLastSale,
+    forecastExplanation: explanation,
+    warnings: warnings
+  };
+  {
   const recent = history.slice().sort(function(a, b) {
     return b.date - a.date;
   }).slice(0, 12);
@@ -180,6 +266,8 @@ function analyzeProduct_(stock, history, settings, request) {
   };
 }
 
+}
+
 function trackingToken_(value) {
   return clean_(value)
     .toLocaleUpperCase('tr-TR')
@@ -212,11 +300,30 @@ function compareProductPriority_(a, b) {
     clean_(a.name).localeCompare(clean_(b.name), 'tr');
 }
 
-function stockStatus_(stock, criticalLevel, hasHistory) {
-  if (!hasHistory) return 'veri_yetersiz';
+function stockStatus_(stock, criticalLevel, demandClass) {
+  if (demandClass === false) return 'veri_yetersiz';
+  if (criticalLevel == null) {
+    if (demandClass === 'MANUEL_TAKIP') return 'manuel_takip';
+    if (demandClass === 'HAREKETSIZ') return 'hareketsiz';
+    return 'veri_yetersiz';
+  }
   if (stock <= criticalLevel) return 'critical';
   if (stock <= criticalLevel * 1.25) return 'low';
   return 'normal';
+}
+
+function demandClassExplanation_(demandClass, manualMinimum) {
+  const suffix = manualMinimum > 0 ? ' Manuel minimum stok kurali uygulandi.' : '';
+  return ({
+    YETERSIZ_VERI: 'Yeterli aylik satis gecmisi yok; otomatik alim onerisi olusturulmadi.',
+    HAREKETSIZ: 'Son 24 ayda satis yok; otomatik alim onerisi olusturulmadi.',
+    MANUEL_TAKIP: 'Cok seyrek satis var; otomatik kritik esik olusturulmadi.',
+    MEVSIMSEL: 'Mevsimsel talep: gecmis yillarin ayni aylari kullanildi.',
+    DUZENLI: 'Duzenli talep: son 12 ay agirlikli ortalamasi kullanildi.',
+    DEGISKEN: 'Degisken talep: son 12 ay agirlikli ortalamasi kullanildi.',
+    KESIKLI: 'Seyrek talep: TSB tahmini kullanildi.',
+    YIGINSAL: 'Seyrek ve oynak talep: TSB tahmini kullanildi.'
+  }[demandClass] || 'Talep sinifi belirlenemedi.') + suffix;
 }
 
 function weightedAverage_(rows) {
@@ -251,6 +358,203 @@ function calculateSafetyStock_(quantities, leadTimeDays) {
     populationStdDev_(quantities) *
     Math.sqrt(leadTimeMonths)
   );
+}
+
+function parseYearMonth_(value) {
+  const match = clean_(value).match(/^(\d{4})-(\d{2})$/);
+  if (!match) throw new Error('Gecersiz analiz ayi: ' + clean_(value));
+  return {year: Number(match[1]), month: Number(match[2])};
+}
+
+function shiftMonth_(year, month, offset) {
+  const date = new Date(year, month - 1 + offset, 1);
+  return {year: date.getFullYear(), month: date.getMonth() + 1};
+}
+
+function buildMonthlySeries_(history, startMonth, monthCount) {
+  const start = parseYearMonth_(startMonth);
+  const quantities = {};
+  (history || []).forEach(function(row) {
+    const key = row.year + '-' + row.month;
+    quantities[key] = number_(quantities[key]) + number_(row.quantity);
+  });
+  const result = [];
+  for (let offset = -monthCount; offset < 0; offset += 1) {
+    const item = shiftMonth_(start.year, start.month, offset);
+    result.push({
+      year: item.year,
+      month: item.month,
+      quantity: number_(quantities[item.year + '-' + item.month]),
+      date: new Date(item.year, item.month - 1, 1)
+    });
+  }
+  return result;
+}
+
+function monthKey_(row) {
+  return row.year + '-' + String(row.month).padStart(2, '0');
+}
+
+function calculateDemandMetrics_(series) {
+  const nonZero = series.filter(function(row) {
+    return number_(row.quantity) > 0;
+  });
+  const quantities = nonZero.map(function(row) {
+    return number_(row.quantity);
+  });
+  const mean = quantities.length ? quantities.reduce(function(sum, value) {
+    return sum + value;
+  }, 0) / quantities.length : 0;
+  const cv2 = mean ? Math.pow(populationStdDev_(quantities) / mean, 2) : 0;
+  const lastIndex = series.reduce(function(found, row, index) {
+    return number_(row.quantity) > 0 ? index : found;
+  }, -1);
+  return {
+    nonZeroMonthCount: nonZero.length,
+    monthsSinceLastSale: lastIndex < 0 ? null : series.length - 1 - lastIndex,
+    lastSaleDate: lastIndex < 0 ? '' : monthKey_(series[lastIndex]),
+    adi: nonZero.length ? series.length / nonZero.length : Infinity,
+    cv2: cv2
+  };
+}
+
+function availableHistoryMonths_(salesByProduct, startMonth) {
+  const start = parseYearMonth_(startMonth);
+  let earliest = null;
+  Object.keys(salesByProduct || {}).forEach(function(code) {
+    (salesByProduct[code] || []).forEach(function(row) {
+      const ordinal = row.year * 12 + row.month - 1;
+      if (earliest == null || ordinal < earliest) earliest = ordinal;
+    });
+  });
+  if (earliest == null) return 0;
+  const startOrdinal = start.year * 12 + start.month - 1;
+  return Math.max(0, Math.min(36, startOrdinal - earliest));
+}
+
+function correlation_(left, right) {
+  if (left.length !== right.length || left.length < 2) return null;
+  const leftMean = left.reduce(function(sum, value) {
+    return sum + number_(value);
+  }, 0) / left.length;
+  const rightMean = right.reduce(function(sum, value) {
+    return sum + number_(value);
+  }, 0) / right.length;
+  let numerator = 0;
+  let leftSquare = 0;
+  let rightSquare = 0;
+  left.forEach(function(value, index) {
+    const a = number_(value) - leftMean;
+    const b = number_(right[index]) - rightMean;
+    numerator += a * b;
+    leftSquare += a * a;
+    rightSquare += b * b;
+  });
+  const denominator = Math.sqrt(leftSquare * rightSquare);
+  return denominator ? numerator / denominator : null;
+}
+
+function lag12Correlation_(series) {
+  if (series.length < 24) return null;
+  const quantities = series.map(function(row) {
+    return number_(row.quantity);
+  });
+  return correlation_(
+    quantities.slice(0, quantities.length - 12),
+    quantities.slice(12)
+  );
+}
+
+function classifyDemand_(metrics) {
+  if (number_(metrics.availableMonths) < 12) return 'YETERSIZ_VERI';
+  if (metrics.monthsSinceLastSale == null || number_(metrics.monthsSinceLastSale) >= 24) {
+    return 'HAREKETSIZ';
+  }
+  if (number_(metrics.nonZeroMonthCount) <= 2) return 'MANUEL_TAKIP';
+  if (number_(metrics.availableMonths) >= 24 &&
+      metrics.lag12Correlation != null &&
+      number_(metrics.lag12Correlation) >= 0.50) {
+    return 'MEVSIMSEL';
+  }
+  if (number_(metrics.adi) < 1.32) {
+    return number_(metrics.cv2) < 0.49 ? 'DUZENLI' : 'DEGISKEN';
+  }
+  return number_(metrics.cv2) < 0.49 ? 'KESIKLI' : 'YIGINSAL';
+}
+
+function seasonalForecast_(series, startMonth, horizon) {
+  const start = parseYearMonth_(startMonth);
+  const weights = [3, 2, 1];
+  const months = [];
+  let fallbackUsed = false;
+  for (let offset = 0; offset < horizon; offset += 1) {
+    const target = shiftMonth_(start.year, start.month, offset);
+    const matches = series.filter(function(row) {
+      return row.month === target.month && row.year < target.year;
+    }).slice(-3).reverse();
+    if (matches.length < 2) {
+      fallbackUsed = true;
+      months.push(weightedAverage_(series.slice(-12).reverse()));
+      continue;
+    }
+    const usedWeights = weights.slice(0, matches.length);
+    const totalWeight = usedWeights.reduce(function(sum, value) {
+      return sum + value;
+    }, 0);
+    months.push(matches.reduce(function(sum, row, index) {
+      return sum + number_(row.quantity) * usedWeights[index];
+    }, 0) / totalWeight);
+  }
+  return {months: months, fallbackUsed: fallbackUsed, errors: []};
+}
+
+function tsbForecast_(quantities, alpha, beta) {
+  let size = 0;
+  let probability = 0;
+  const errors = [];
+  quantities.forEach(function(quantity, index) {
+    const demand = number_(quantity);
+    const forecast = probability * size;
+    errors.push(demand - forecast);
+    const occurred = demand > 0 ? 1 : 0;
+    if (index === 0 && occurred) {
+      size = demand;
+      probability = 1;
+    } else {
+      probability = probability + beta * (occurred - probability);
+      if (occurred) size = size + alpha * (demand - size);
+    }
+  });
+  return {forecast: probability * size, errors: errors};
+}
+
+function forecastDemand_(demandClass, series, startMonth) {
+  if (['HAREKETSIZ', 'MANUEL_TAKIP', 'YETERSIZ_VERI'].indexOf(demandClass) >= 0) {
+    return {months: [0, 0, 0], errors: [], explanation: ''};
+  }
+  if (demandClass === 'MEVSIMSEL') {
+    const seasonal = seasonalForecast_(series, startMonth, 3);
+    seasonal.explanation = seasonal.fallbackUsed ?
+      'Mevsimsel talep; eksik aylarda agirlikli ortalama kullanildi.' :
+      'Mevsimsel talep: gecmis yillarin ayni aylari kullanildi.';
+    return seasonal;
+  }
+  if (demandClass === 'KESIKLI' || demandClass === 'YIGINSAL') {
+    const tsb = tsbForecast_(series.map(function(row) {
+      return row.quantity;
+    }), 0.20, 0.10);
+    return {
+      months: [tsb.forecast, tsb.forecast, tsb.forecast],
+      errors: tsb.errors,
+      explanation: 'Seyrek talep: TSB tahmini kullanildi.'
+    };
+  }
+  const monthly = weightedAverage_(series.slice(-12).reverse());
+  return {
+    months: [monthly, monthly, monthly],
+    errors: [],
+    explanation: 'Duzenli talep: son 12 ay agirlikli ortalamasi kullanildi.'
+  };
 }
 
 function readCurrentStock_() {
@@ -309,6 +613,7 @@ function readProductSettings_() {
       packSize: number_(row.Paket_Miktari) || 1,
       active: clean_(row.Aktif || 'EVET').toUpperCase() !== 'HAYIR',
       trackingLevel: normalizeTrackingLevel_(row.Takip_Seviyesi),
+      minimumStock: Math.max(0, number_(row.Minimum_Stok)),
       missing: false
     };
   });
@@ -376,13 +681,18 @@ function writeAnalysis_(analysis) {
       product.monthlyDemand,
       product.demandDeviation,
       product.safetyStock,
-      product.criticalLevel,
+      product.criticalLevel == null ? '' : product.criticalLevel,
       product.months[0],
       product.months[1],
       product.months[2],
       product.suggestedPurchase,
       product.status,
-      product.dataDate
+      product.dataDate,
+      product.demandClass,
+      product.lastSaleDate,
+      product.nonZeroMonthCount,
+      product.monthsSinceLastSale,
+      product.forecastExplanation
     ];
   });
   if (rows.length) {
@@ -421,6 +731,8 @@ function buildDailyEmail_(analysis) {
     'Toplam ürün: ' + analysis.summary.totalProducts,
     'Kritik: ' + analysis.summary.criticalCount,
     'Düşük stok: ' + analysis.summary.lowCount,
+    'Manuel takip: ' + (analysis.summary.manualCount || 0),
+    'Hareketsiz: ' + (analysis.summary.dormantCount || 0),
     'Yetersiz veri: ' + analysis.summary.insufficientCount,
     'Toplam önerilen alım: ' + analysis.summary.purchaseTotal
   ];
@@ -475,6 +787,8 @@ function buildDailyEmail_(analysis) {
             summaryCardHtml_('Toplam ürün', analysis.summary.totalProducts) +
             summaryCardHtml_('Kritik', analysis.summary.criticalCount) +
             summaryCardHtml_('Düşük stok', analysis.summary.lowCount) +
+            summaryCardHtml_('Manuel takip', analysis.summary.manualCount || 0) +
+            summaryCardHtml_('Hareketsiz', analysis.summary.dormantCount || 0) +
           '</tr><tr>' +
             summaryCardHtml_('Yetersiz veri', analysis.summary.insufficientCount) +
             summaryCardHtml_('Önerilen alım', analysis.summary.purchaseTotal) +
@@ -537,6 +851,19 @@ function trackingLevelLabel_(level) {
   }[normalizeTrackingLevel_(level)];
 }
 
+function demandClassLabel_(demandClass) {
+  return {
+    YETERSIZ_VERI: 'Yetersiz veri',
+    HAREKETSIZ: 'Hareketsiz',
+    MANUEL_TAKIP: 'Manuel takip',
+    MEVSIMSEL: 'Mevsimsel',
+    DUZENLI: 'Duzenli',
+    DEGISKEN: 'Degisken',
+    KESIKLI: 'Kesikli',
+    YIGINSAL: 'Yiginsal'
+  }[demandClass] || clean_(demandClass);
+}
+
 function buildPurchaseReportRows_(products) {
   return products.filter(function(product) {
     return number_(product.suggestedPurchase) > 0;
@@ -548,7 +875,7 @@ function buildPurchaseReportRows_(products) {
       product.code,
       product.name,
       number_(product.stock),
-      number_(product.criticalLevel),
+      product.criticalLevel == null ? '' : number_(product.criticalLevel),
       (product.months || []).reduce(function(sum, value) {
         return sum + number_(value);
       }, 0),
@@ -598,6 +925,66 @@ function createPurchaseReportAttachment_(analysis) {
   };
 }
 
+function buildFilteredAnalysisReportRows_(products) {
+  return products.map(function(product) {
+    return [
+      product.code,
+      product.name,
+      number_(product.stock),
+      demandClassLabel_(product.demandClass),
+      product.criticalLevel == null ? '' : number_(product.criticalLevel),
+      number_(product.suggestedPurchase),
+      product.lastSaleDate,
+      product.forecastExplanation
+    ];
+  });
+}
+
+function createFilteredAnalysisReport_(analysis, products) {
+  const dateLabel = String(analysis.calculatedAt || '').slice(0, 10);
+  const fileName = 'Stok_Analizi_' + dateLabel + '.xlsx';
+  const temporary = SpreadsheetApp.create('Stok Pusulasi Gecici Analiz ' + dateLabel);
+  let temporaryFileId = temporary.getId();
+  try {
+    const sheet = temporary.getSheets()[0];
+    const headers = [
+      'Urun_Kodu', 'Urun_Adi', 'Guncel_Stok', 'Tahmin_Sinifi',
+      'Kritik_Esik', 'Onerilen_Alim', 'Son_Satis_Tarihi', 'Aciklama'
+    ];
+    const rows = buildFilteredAnalysisReportRows_(products);
+    sheet.setName('Stok_Analizi');
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+      .setBackground('#171717')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold');
+    if (rows.length) {
+      sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+      sheet.getRange(2, 3, rows.length, 3).setNumberFormat('#,##0.00');
+    }
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, headers.length);
+    SpreadsheetApp.flush();
+
+    const response = UrlFetchApp.fetch(
+      'https://docs.google.com/spreadsheets/d/' + temporaryFileId + '/export?format=xlsx',
+      {
+        headers: {Authorization: 'Bearer ' + ScriptApp.getOAuthToken()},
+        muteHttpExceptions: true
+      }
+    );
+    if (response.getResponseCode() !== 200) {
+      throw new Error('Excel raporu olusturulamadi: HTTP ' + response.getResponseCode());
+    }
+    return {
+      fileName: fileName,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: Utilities.base64Encode(response.getContent())
+    };
+  } finally {
+    trashTemporaryReport_(temporaryFileId);
+  }
+}
+
 function trashTemporaryReport_(fileId) {
   if (fileId) DriveApp.getFileById(fileId).setTrashed(true);
 }
@@ -624,7 +1011,49 @@ function runDailyAnalysisAndEmail() {
   return analysis;
 }
 
+function requireAccessToken_(token) {
+  const expectedToken = PropertiesService.getScriptProperties().getProperty('ACCESS_TOKEN');
+  if (!expectedToken) {
+    throw new Error('ACCESS_TOKEN Apps Script ozelligi tanimli degil.');
+  }
+  if (!constantTimeEqual_(clean_(token), clean_(expectedToken))) {
+    throw new Error('Gecersiz erisim anahtari.');
+  }
+}
+
+function handleAnalysisExport_(payload) {
+  requireAccessToken_(payload.token);
+  if (!Array.isArray(payload.codes) || !payload.codes.length) {
+    throw new Error('Excel icin urun secimi bulunamadi.');
+  }
+  if (payload.codes.length > 5000) {
+    throw new Error('Tek istekte en fazla 5000 urun indirilebilir.');
+  }
+  const seen = {};
+  const requestedCodes = [];
+  payload.codes.forEach(function(value) {
+    const code = clean_(value);
+    if (code && !seen[code]) {
+      seen[code] = true;
+      requestedCodes.push(code);
+    }
+  });
+  const analysis = getDashboardData_();
+  const byCode = {};
+  analysis.products.forEach(function(product) {
+    byCode[product.code] = product;
+  });
+  const products = requestedCodes.map(function(code) {
+    return byCode[code];
+  }).filter(Boolean);
+  if (!products.length) {
+    throw new Error('Excel icin gecerli urun bulunamadi.');
+  }
+  return createFilteredAnalysisReport_(analysis, products);
+}
+
 function handleTrackingUpdate_(payload) {
+  requireAccessToken_(payload.token);
   const expectedToken = PropertiesService.getScriptProperties().getProperty('ACCESS_TOKEN');
   if (!expectedToken) {
     throw new Error('ACCESS_TOKEN Apps Script özelliği tanımlı değil.');
@@ -681,7 +1110,7 @@ function updateTrackingLevels_(updates) {
   updates.forEach(function(update) {
     let rowIndex = rowByCode[update.code];
     if (rowIndex == null) {
-      rows.push([update.code, 30, 1, 'EVET', update.trackingLevel]);
+      rows.push([update.code, 30, 1, 'EVET', update.trackingLevel, '']);
       rowIndex = rows.length - 1;
       rowByCode[update.code] = rowIndex;
     } else {
