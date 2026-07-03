@@ -436,7 +436,7 @@ test('daily email includes a compact summary and attachment note', () => {
     freshness: {latestDate: '2026-06-10'},
     summary: {
       totalProducts: 2, criticalCount: 0, lowCount: 1,
-      insufficientCount: 0, purchaseTotal: 24
+      insufficientCount: 0, manualCount: 3, dormantCount: 4, purchaseTotal: 24
     },
     products: [
       {
@@ -455,6 +455,8 @@ test('daily email includes a compact summary and attachment note', () => {
   assert.match(email.body, /24/);
   assert.match(email.body, /2026-06-10/);
   assert.match(email.body, /Excel/i);
+  assert.match(email.body, /Manuel takip: 3/i);
+  assert.match(email.body, /Hareketsiz: 4/i);
   assert.doesNotMatch(email.body, /URN-002/);
   assert.match(email.htmlBody, /Stok Pusulası/);
 });
@@ -509,6 +511,19 @@ test('purchase report rows include only positive suggestions sorted descending',
     ['URN-LOW', 'Düşük', 4, 8, 6, 6, 'Düşük', 'Öncelikli'],
     ['URN-HIGH', 'Yüksek', 1, 10, 15, 20, 'Kritik', 'Normal']
   ]);
+});
+
+test('purchase report serializes nullable critical level as blank', () => {
+  const app = loadCode();
+  const rows = app.buildPurchaseReportRows_([
+    {
+      code: 'MANUAL', name: 'Manual', stock: 1, criticalLevel: null,
+      months: [0, 0, 0], suggestedPurchase: 4, status: 'critical',
+      trackingLevel: 'NORMAL'
+    }
+  ]);
+
+  assert.equal(rows[0][3], '');
 });
 
 test('tracking update rejects invalid token and writes valid batch updates', () => {

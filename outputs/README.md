@@ -61,6 +61,7 @@ Gerekli sütunlar:
 - `Paket_Miktari`: Alım önerisinin yuvarlanacağı koli/paket adedi
 - `Aktif`: `EVET` veya `HAYIR`
 - `Takip_Seviyesi`: `ONCELIKLI`, `NORMAL` veya `TAKIP_ETME`
+- `Minimum_Stok`: Stratejik veya elde tutulmasi gereken urunlerde manuel alt stok esigi. Bos veya `0` ise otomatik minimum uygulanmaz.
 
 `ONCELIKLI` ürünler panel, e-posta ve Excel raporunda üstte gösterilir.
 `TAKIP_ETME` ürünleri analiz, alım önerisi ve günlük e-postadan çıkarılır.
@@ -151,7 +152,7 @@ aylık tahmin × (tedarik süresi / 30) + güvenlik stoğu
 
 Negatif öneriler `0` yapılır. Pozitif sonuçlar `Paket_Miktari` katına yukarı yuvarlanır.
 
-## 9. Eski sekmeler
+## 10. Eski sekmeler
 
 Önceki sürümden kalan şu sekmeler yeni sistem tarafından kullanılmaz:
 

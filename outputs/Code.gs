@@ -731,6 +731,8 @@ function buildDailyEmail_(analysis) {
     'Toplam ürün: ' + analysis.summary.totalProducts,
     'Kritik: ' + analysis.summary.criticalCount,
     'Düşük stok: ' + analysis.summary.lowCount,
+    'Manuel takip: ' + (analysis.summary.manualCount || 0),
+    'Hareketsiz: ' + (analysis.summary.dormantCount || 0),
     'Yetersiz veri: ' + analysis.summary.insufficientCount,
     'Toplam önerilen alım: ' + analysis.summary.purchaseTotal
   ];
@@ -785,6 +787,8 @@ function buildDailyEmail_(analysis) {
             summaryCardHtml_('Toplam ürün', analysis.summary.totalProducts) +
             summaryCardHtml_('Kritik', analysis.summary.criticalCount) +
             summaryCardHtml_('Düşük stok', analysis.summary.lowCount) +
+            summaryCardHtml_('Manuel takip', analysis.summary.manualCount || 0) +
+            summaryCardHtml_('Hareketsiz', analysis.summary.dormantCount || 0) +
           '</tr><tr>' +
             summaryCardHtml_('Yetersiz veri', analysis.summary.insufficientCount) +
             summaryCardHtml_('Önerilen alım', analysis.summary.purchaseTotal) +
@@ -871,7 +875,7 @@ function buildPurchaseReportRows_(products) {
       product.code,
       product.name,
       number_(product.stock),
-      number_(product.criticalLevel),
+      product.criticalLevel == null ? '' : number_(product.criticalLevel),
       (product.months || []).reduce(function(sum, value) {
         return sum + number_(value);
       }, 0),
