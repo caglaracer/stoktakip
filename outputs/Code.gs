@@ -375,6 +375,81 @@ function classifyDemand_(metrics) {
   return number_(metrics.cv2) < 0.49 ? 'KESIKLI' : 'YIGINSAL';
 }
 
+function seasonalForecast_(series, startMonth, horizon) {
+  const start = parseYearMonth_(startMonth);
+  const weights = [3, 2, 1];
+  const months = [];
+  let fallbackUsed = false;
+  for (let offset = 0; offset < horizon; offset += 1) {
+    const target = shiftMonth_(start.year, start.month, offset);
+    const matches = series.filter(function(row) {
+      return row.month === target.month && row.year < target.year;
+    }).slice(-3).reverse();
+    if (matches.length < 2) {
+      fallbackUsed = true;
+      months.push(weightedAverage_(series.slice(-12).reverse()));
+      continue;
+    }
+    const usedWeights = weights.slice(0, matches.length);
+    const totalWeight = usedWeights.reduce(function(sum, value) {
+      return sum + value;
+    }, 0);
+    months.push(matches.reduce(function(sum, row, index) {
+      return sum + number_(row.quantity) * usedWeights[index];
+    }, 0) / totalWeight);
+  }
+  return {months: months, fallbackUsed: fallbackUsed, errors: []};
+}
+
+function tsbForecast_(quantities, alpha, beta) {
+  let size = 0;
+  let probability = 0;
+  const errors = [];
+  quantities.forEach(function(quantity, index) {
+    const demand = number_(quantity);
+    const forecast = probability * size;
+    errors.push(demand - forecast);
+    const occurred = demand > 0 ? 1 : 0;
+    if (index === 0 && occurred) {
+      size = demand;
+      probability = 1;
+    } else {
+      probability = probability + beta * (occurred - probability);
+      if (occurred) size = size + alpha * (demand - size);
+    }
+  });
+  return {forecast: probability * size, errors: errors};
+}
+
+function forecastDemand_(demandClass, series, startMonth) {
+  if (['HAREKETSIZ', 'MANUEL_TAKIP', 'YETERSIZ_VERI'].indexOf(demandClass) >= 0) {
+    return {months: [0, 0, 0], errors: [], explanation: ''};
+  }
+  if (demandClass === 'MEVSIMSEL') {
+    const seasonal = seasonalForecast_(series, startMonth, 3);
+    seasonal.explanation = seasonal.fallbackUsed ?
+      'Mevsimsel talep; eksik aylarda agirlikli ortalama kullanildi.' :
+      'Mevsimsel talep: gecmis yillarin ayni aylari kullanildi.';
+    return seasonal;
+  }
+  if (demandClass === 'KESIKLI' || demandClass === 'YIGINSAL') {
+    const tsb = tsbForecast_(series.map(function(row) {
+      return row.quantity;
+    }), 0.20, 0.10);
+    return {
+      months: [tsb.forecast, tsb.forecast, tsb.forecast],
+      errors: tsb.errors,
+      explanation: 'Seyrek talep: TSB tahmini kullanildi.'
+    };
+  }
+  const monthly = weightedAverage_(series.slice(-12).reverse());
+  return {
+    months: [monthly, monthly, monthly],
+    errors: [],
+    explanation: 'Duzenli talep: son 12 ay agirlikli ortalamasi kullanildi.'
+  };
+}
+
 function readCurrentStock_() {
   return rowsAsObjects_(getSheet_(CONFIG.SHEETS.STOCK)).filter(function(row) {
     return clean_(row.Urun_Kodu);

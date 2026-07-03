@@ -125,6 +125,33 @@ test('demand classification separates seasonal smooth erratic intermittent and l
   assert.equal(app.classifyDemand_({...base, adi: 2, cv2: 0.7, lag12Correlation: 0.1}), 'YIGINSAL');
 });
 
+test('seasonal forecast weights matching calendar months 3 2 1', () => {
+  const app = loadCode();
+  const series = app.buildMonthlySeries_([
+    {year: 2023, month: 6, quantity: 10},
+    {year: 2024, month: 6, quantity: 20},
+    {year: 2025, month: 6, quantity: 40}
+  ], '2026-06', 36);
+  const forecast = app.seasonalForecast_(series, '2026-06', 3);
+  assert.ok(Math.abs(forecast.months[0] - 28.3333333) < 0.0001);
+});
+
+test('TSB forecast decays demand probability across zero months', () => {
+  const app = loadCode();
+  const result = app.tsbForecast_([10, 0, 0, 0], 0.20, 0.10);
+  assert.ok(result.forecast > 0);
+  assert.ok(result.forecast < 10);
+  assert.equal(result.errors.length, 4);
+});
+
+test('regular forecast preserves decimals until final purchasing', () => {
+  const app = loadCode();
+  const result = app.forecastDemand_('DUZENLI', [
+    {quantity: 1}, {quantity: 2}, {quantity: 2}
+  ], '2026-06');
+  assert.notEqual(result.months[0], Math.ceil(result.months[0]));
+});
+
 test('product analysis calculates threshold, status, and pack-rounded purchase', () => {
   const app = loadCode();
   const stock = {code: 'URN-001', name: 'Test', stock: 50, dataDate: '2026-06-11'};
