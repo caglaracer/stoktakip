@@ -730,6 +730,10 @@ test('browser copies expose tracking management and protected POST updates', () 
     assert.match(source, /id=["']freshnessNotice["']/);
     assert.match(source, /id=["']analysisSearch["']/);
     assert.match(source, /id=["']analysisStatus["']/);
+    assert.match(source, /id=["']analysisTracking["']/);
+    assert.match(source, /id=["']downloadAnalysis["']/);
+    assert.match(source, /id=["']manualCount["']/);
+    assert.match(source, /id=["']dormantCount["']/);
     assert.match(source, /id=["']analysisRows["']/);
     assert.match(source, /id=["']forecastRows["']/);
     assert.match(source, /id=["']trackingRows["']/);
@@ -741,6 +745,10 @@ test('browser copies expose tracking management and protected POST updates', () 
     assert.doesNotMatch(source, /Stok Geçmişi|Açık Siparişler/);
     assert.match(source, /method:\s*["']POST["']/i);
     assert.match(source, /updateTrackingLevels/);
+    assert.match(source, /exportAnalysis/);
+    assert.match(source, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
+    assert.match(source, /manuel_takip/);
+    assert.match(source, /hareketsiz/);
   });
 });
 

@@ -57,7 +57,7 @@
     }
     .btn:hover { background: var(--soft); }
     .grid { display: grid; gap: 12px; }
-    .stats { grid-template-columns: repeat(4,minmax(0,1fr)); margin-bottom: 12px; }
+    .stats { grid-template-columns: repeat(6,minmax(0,1fr)); margin-bottom: 12px; }
     .card {
       background: var(--card); border: 1px solid var(--line);
       border-radius: 8px; box-shadow: var(--shadow);
@@ -77,7 +77,7 @@
       border-radius: 6px; background: var(--soft); color: #3f3f46;
     }
     .notice.warning { border-color: #f5b7b1; background: #fff4f2; color: var(--red); }
-    .filters { display: grid; grid-template-columns: 1fr 190px; gap: 8px; margin-bottom: 10px; }
+    .filters { display: grid; grid-template-columns: 1fr 180px 180px auto; gap: 8px; margin-bottom: 10px; }
     .tracking-tools {
       display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px;
     }
@@ -115,6 +115,7 @@
     .low { color: #27272a; background: #e4e4e7; }
     .critical { color: var(--red); background: var(--red-soft); }
     .veri_yetersiz { color: #52525b; background: #e4e4e7; }
+    .manuel_takip, .hareketsiz { color: #3f3f46; background: #e4e4e7; }
     .alert-list { display: grid; gap: 8px; }
     .alert {
       border: 1px solid var(--line); border-left: 3px solid var(--red);
@@ -179,6 +180,8 @@
           <div class="card stat"><small>Toplam ürün</small><strong id="totalProducts">0</strong><span>Aktif stok kalemleri</span></div>
           <div class="card stat"><small>Kritik stok</small><strong id="criticalCount">0</strong><span>Alım önceliği yüksek</span></div>
           <div class="card stat"><small>Düşük stok</small><strong id="lowCount">0</strong><span>Yakından izlenmeli</span></div>
+          <div class="card stat"><small>Manuel takip</small><strong id="manualCount">0</strong><span>Seyrek satis</span></div>
+          <div class="card stat"><small>Hareketsiz</small><strong id="dormantCount">0</strong><span>Son 24 ay satis yok</span></div>
           <div class="card stat"><small>Yetersiz veri</small><strong id="insufficientCount">0</strong><span>Satış geçmişi eksik</span></div>
         </div>
         <div class="grid split">
@@ -202,10 +205,18 @@
               <option value="critical">Kritik</option>
               <option value="low">Düşük</option>
               <option value="normal">Normal</option>
+              <option value="manuel_takip">Manuel takip</option>
+              <option value="hareketsiz">Hareketsiz</option>
               <option value="veri_yetersiz">Yetersiz veri</option>
             </select>
+            <select id="analysisTracking">
+              <option value="">Tum takip seviyeleri</option>
+              <option value="ONCELIKLI">Oncelikli</option>
+              <option value="NORMAL">Normal</option>
+            </select>
+            <button class="btn primary" id="downloadAnalysis">Excel Indir</button>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Takip</th><th>Stok</th><th>Aylık talep</th><th>Sapma</th><th>Güvenlik stoğu</th><th>Kritik eşik</th><th>Tedarik günü</th><th>Durum</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Takip</th><th>Stok</th><th>Sinif</th><th>Aylik talep</th><th>Sapma</th><th>Guvenlik stogu</th><th>Kritik esik</th><th>Son satis</th><th>Durum</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
         </div>
       </section>
 
@@ -334,6 +345,8 @@
       $("criticalCount").textContent = summary.criticalCount ?? 0;
       $("lowCount").textContent = summary.lowCount ?? 0;
       $("insufficientCount").textContent = summary.insufficientCount ?? 0;
+      $("manualCount").textContent = summary.manualCount ?? 0;
+      $("dormantCount").textContent = summary.dormantCount ?? 0;
       $("purchaseTotal").textContent = `${fmt(summary.purchaseTotal)} adet`;
       $("freshnessNotice").textContent = `${freshness.message || "Veri tarihi bilinmiyor."} Son veri: ${freshness.latestDate || "—"} · Hesaplama: ${state.data.calculatedAt || "—"}`;
       $("freshnessNotice").classList.toggle("warning",!!(freshness.missing||freshness.inconsistent||freshness.stale));
@@ -349,16 +362,24 @@
       renderForecast();
       renderTracking();
     }
-    function renderAnalysis() {
+    function thresholdText(value) {
+      return value == null || value === "" ? "-" : fmt(value);
+    }
+    function visibleAnalysisProducts() {
       const query = $("analysisSearch").value.toLocaleLowerCase("tr");
       const status = $("analysisStatus").value;
-      const rows = (state.data.products||[]).filter(product =>
-        (!query || `${product.code} ${product.name}`.toLocaleLowerCase("tr").includes(query)) &&
-        (!status || product.status===status)
+      const tracking = $("analysisTracking").value;
+      return (state.data.products||[]).filter(product =>
+        (!query || (product.code + " " + product.name).toLocaleLowerCase("tr").includes(query)) &&
+        (!status || product.status===status) &&
+        (!tracking || product.trackingLevel===tracking)
       );
+    }
+    function renderAnalysis() {
+      const rows = visibleAnalysisProducts();
       $("analysisRows").innerHTML = rows.map(product =>
-        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${esc(trackingText[product.trackingLevel]||"Normal")}</td><td>${fmt(product.stock)}</td><td>${fmt(product.monthlyDemand)}</td><td>${fmt(product.demandDeviation)}</td><td>${fmt(product.safetyStock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt(product.leadTime)}</td><td>${badge(product.status)}</td></tr>`
-      ).join("") || emptyRow(10);
+        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${esc(trackingText[product.trackingLevel]||"Normal")}</td><td>${fmt(product.stock)}</td><td>${esc(demandClassText[product.demandClass]||product.demandClass||"-")}</td><td>${fmt(product.monthlyDemand)}</td><td>${fmt(product.demandDeviation)}</td><td>${fmt(product.safetyStock)}</td><td>${thresholdText(product.criticalLevel)}</td><td>${esc(product.lastSaleDate||"-")}</td><td>${badge(product.status)}</td></tr>`
+      ).join("") || emptyRow(11);
     }
     function renderForecast() {
       const rank = value => value==="ONCELIKLI"?0:1;
@@ -443,6 +464,33 @@
         $("saveTracking").disabled = false;
       }
     }
+
+    function base64Blob(base64, mimeType) {
+      const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
+      return new Blob([bytes], {type: mimeType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    }
+    async function downloadAnalysis() {
+      const products = visibleAnalysisProducts();
+      if (!products.length) {
+        toast("Excel icin uygun kayit bulunamadi.");
+        return;
+      }
+      $("downloadAnalysis").disabled = true;
+      try {
+        const result = await postApi({action:"exportAnalysis",codes:products.map(product=>product.code)});
+        if (!result.ok) throw new Error(result.error||"Excel raporu olusturulamadi.");
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(base64Blob(result.data.base64,result.data.mimeType));
+        link.download = result.data.fileName || "Stok_Analizi.xlsx";
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast(products.length + " urun Excel olarak indirildi.");
+      } catch (error) {
+        toast("Excel hatasi: " + error.message);
+      } finally {
+        $("downloadAnalysis").disabled = false;
+      }
+    }
     async function loadData(showMessage=true) {
       if (!state.apiUrl) {
         state.data = structuredClone(demo);
@@ -465,6 +513,8 @@
     document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click",()=>showView(button.dataset.go)));
     $("analysisSearch").addEventListener("input",renderAnalysis);
     $("analysisStatus").addEventListener("change",renderAnalysis);
+    $("analysisTracking").addEventListener("change",renderAnalysis);
+    $("downloadAnalysis").addEventListener("click",downloadAnalysis);
     $("trackingSearch").addEventListener("input",renderTracking);
     $("trackingFilter").addEventListener("change",renderTracking);
     $("trackingRows").addEventListener("change",event=>{
