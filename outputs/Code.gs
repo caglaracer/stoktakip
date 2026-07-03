@@ -253,6 +253,78 @@ function calculateSafetyStock_(quantities, leadTimeDays) {
   );
 }
 
+function parseYearMonth_(value) {
+  const match = clean_(value).match(/^(\d{4})-(\d{2})$/);
+  if (!match) throw new Error('Gecersiz analiz ayi: ' + clean_(value));
+  return {year: Number(match[1]), month: Number(match[2])};
+}
+
+function shiftMonth_(year, month, offset) {
+  const date = new Date(year, month - 1 + offset, 1);
+  return {year: date.getFullYear(), month: date.getMonth() + 1};
+}
+
+function buildMonthlySeries_(history, startMonth, monthCount) {
+  const start = parseYearMonth_(startMonth);
+  const quantities = {};
+  (history || []).forEach(function(row) {
+    const key = row.year + '-' + row.month;
+    quantities[key] = number_(quantities[key]) + number_(row.quantity);
+  });
+  const result = [];
+  for (let offset = -monthCount; offset < 0; offset += 1) {
+    const item = shiftMonth_(start.year, start.month, offset);
+    result.push({
+      year: item.year,
+      month: item.month,
+      quantity: number_(quantities[item.year + '-' + item.month]),
+      date: new Date(item.year, item.month - 1, 1)
+    });
+  }
+  return result;
+}
+
+function monthKey_(row) {
+  return row.year + '-' + String(row.month).padStart(2, '0');
+}
+
+function calculateDemandMetrics_(series) {
+  const nonZero = series.filter(function(row) {
+    return number_(row.quantity) > 0;
+  });
+  const quantities = nonZero.map(function(row) {
+    return number_(row.quantity);
+  });
+  const mean = quantities.length ? quantities.reduce(function(sum, value) {
+    return sum + value;
+  }, 0) / quantities.length : 0;
+  const cv2 = mean ? Math.pow(populationStdDev_(quantities) / mean, 2) : 0;
+  const lastIndex = series.reduce(function(found, row, index) {
+    return number_(row.quantity) > 0 ? index : found;
+  }, -1);
+  return {
+    nonZeroMonthCount: nonZero.length,
+    monthsSinceLastSale: lastIndex < 0 ? null : series.length - 1 - lastIndex,
+    lastSaleDate: lastIndex < 0 ? '' : monthKey_(series[lastIndex]),
+    adi: nonZero.length ? series.length / nonZero.length : Infinity,
+    cv2: cv2
+  };
+}
+
+function availableHistoryMonths_(salesByProduct, startMonth) {
+  const start = parseYearMonth_(startMonth);
+  let earliest = null;
+  Object.keys(salesByProduct || {}).forEach(function(code) {
+    (salesByProduct[code] || []).forEach(function(row) {
+      const ordinal = row.year * 12 + row.month - 1;
+      if (earliest == null || ordinal < earliest) earliest = ordinal;
+    });
+  });
+  if (earliest == null) return 0;
+  const startOrdinal = start.year * 12 + start.month - 1;
+  return Math.max(0, Math.min(36, startOrdinal - earliest));
+}
+
 function readCurrentStock_() {
   return rowsAsObjects_(getSheet_(CONFIG.SHEETS.STOCK)).filter(function(row) {
     return clean_(row.Urun_Kodu);

@@ -60,6 +60,48 @@ test('population deviation and safety stock use demand variability', () => {
   assert.equal(app.calculateSafetyStock_([10, 20, 30], 30), 14);
 });
 
+test('monthly series contains the latest 36 complete months with zero-filled gaps', () => {
+  const app = loadCode();
+  const series = app.buildMonthlySeries_([
+    {year: 2024, month: 6, quantity: 2, date: new Date(2024, 5, 1)}
+  ], '2026-06', 36);
+
+  assert.equal(series.length, 36);
+  assert.deepEqual(
+    {year: series[0].year, month: series[0].month},
+    {year: 2023, month: 6}
+  );
+  assert.deepEqual(
+    {year: series[35].year, month: series[35].month},
+    {year: 2026, month: 5}
+  );
+  assert.equal(series.find(row => row.year === 2024 && row.month === 6).quantity, 2);
+  assert.equal(series.filter(row => row.quantity > 0).length, 1);
+});
+
+test('demand metrics calculate non-zero months ADI CV2 and last sale age', () => {
+  const app = loadCode();
+  const series = app.buildMonthlySeries_([
+    {year: 2024, month: 6, quantity: 2, date: new Date(2024, 5, 1)}
+  ], '2026-06', 36);
+  const metrics = app.calculateDemandMetrics_(series);
+
+  assert.equal(metrics.nonZeroMonthCount, 1);
+  assert.equal(metrics.monthsSinceLastSale, 23);
+  assert.equal(metrics.lastSaleDate, '2024-06');
+  assert.equal(metrics.adi, 36);
+  assert.equal(metrics.cv2, 0);
+});
+
+test('history coverage counts complete source months without confusing zero sales', () => {
+  const app = loadCode();
+  const sales = {
+    A: [{year: 2025, month: 10, quantity: 1}],
+    B: [{year: 2026, month: 5, quantity: 2}]
+  };
+  assert.equal(app.availableHistoryMonths_(sales, '2026-06'), 8);
+});
+
 test('product analysis calculates threshold, status, and pack-rounded purchase', () => {
   const app = loadCode();
   const stock = {code: 'URN-001', name: 'Test', stock: 50, dataDate: '2026-06-11'};
