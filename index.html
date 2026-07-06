@@ -178,16 +178,16 @@
       <section id="dashboard" class="view active">
         <div class="grid stats">
           <div class="card stat"><small>Toplam ürün</small><strong id="totalProducts">0</strong><span>Aktif stok kalemleri</span></div>
-          <div class="card stat"><small>Kritik stok</small><strong id="criticalCount">0</strong><span>Alım önceliği yüksek</span></div>
-          <div class="card stat"><small>Düşük stok</small><strong id="lowCount">0</strong><span>Yakından izlenmeli</span></div>
+          <div class="card stat"><small>Acil alım</small><strong id="criticalCount">0</strong><span>Stok 1 ay veya daha az</span></div>
+          <div class="card stat"><small>Yakında alım</small><strong id="lowCount">0</strong><span>Stok 1-3 ay yeter</span></div>
           <div class="card stat"><small>Manuel takip</small><strong id="manualCount">0</strong><span>Seyrek satis</span></div>
           <div class="card stat"><small>Hareketsiz</small><strong id="dormantCount">0</strong><span>Son 24 ay satis yok</span></div>
           <div class="card stat"><small>Yetersiz veri</small><strong id="insufficientCount">0</strong><span>Satış geçmişi eksik</span></div>
         </div>
         <div class="grid split">
           <div class="card panel">
-            <div class="panel-head"><h2>Kritik ürünler</h2><button class="btn" data-go="analysis">Tüm analizi gör</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Ürün</th><th>Stok</th><th>Kritik eşik</th><th>3 aylık ihtiyaç</th><th>Önerilen alım</th></tr></thead><tbody id="criticalRows"></tbody></table></div>
+            <div class="panel-head"><h2>Acil alım ürünleri</h2><button class="btn" data-go="analysis">Tüm analizi gör</button></div>
+            <div class="table-wrap"><table><thead><tr><th>Ürün</th><th>Stok</th><th>Stok kaç ay yeter</th><th>Son 12 ay</th><th>Önerilen alım</th></tr></thead><tbody id="criticalRows"></tbody></table></div>
           </div>
           <div class="card panel">
             <div class="panel-head"><h2>Özet uyarılar</h2></div>
@@ -202,12 +202,12 @@
             <input id="analysisSearch" placeholder="Ürün kodu veya adı ara">
             <select id="analysisStatus">
               <option value="">Tüm durumlar</option>
-              <option value="critical">Kritik</option>
-              <option value="low">Düşük</option>
-              <option value="normal">Normal</option>
-              <option value="manuel_takip">Manuel takip</option>
-              <option value="hareketsiz">Hareketsiz</option>
-              <option value="veri_yetersiz">Yetersiz veri</option>
+              <option value="ACIL_ALIM">Acil alım</option>
+              <option value="YAKINDA_ALIM">Yakında alım</option>
+              <option value="NORMAL">Normal</option>
+              <option value="MANUEL_TAKIP">Manuel takip</option>
+              <option value="HAREKETSIZ">Hareketsiz</option>
+              <option value="YETERSIZ_VERI">Yetersiz veri</option>
             </select>
             <select id="analysisTracking">
               <option value="">Tum takip seviyeleri</option>
@@ -216,7 +216,7 @@
             </select>
             <button class="btn primary" id="downloadAnalysis">Excel Indir</button>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Takip</th><th>Stok</th><th>Sinif</th><th>Aylik talep</th><th>Sapma</th><th>Guvenlik stogu</th><th>Kritik esik</th><th>Son satis</th><th>Durum</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Kod</th><th>Ürün</th><th>Takip</th><th>Stok</th><th>Son satış</th><th>Son 12 ay</th><th>Stok kaç ay yeter</th><th>3 ay tahmin</th><th>Önerilen alım</th><th>Durum</th><th>Açıklama</th></tr></thead><tbody id="analysisRows"></tbody></table></div>
         </div>
       </section>
 
@@ -287,9 +287,9 @@
   <script>
     const demo = {
       products: [
-        {code:"URN-001",name:"Klasik Ürün",category:"Ana Grup",unit:"Adet",stock:42,dataDate:"2026-06-11",leadTime:20,packSize:10,monthlyDemand:58,demandDeviation:9.4,safetyStock:13,criticalLevel:52,months:[58,58,58],suggestedPurchase:150,status:"critical",trackingLevel:"ONCELIKLI",warnings:[]},
-        {code:"URN-002",name:"Mevsimlik Ürün",category:"Sezon",unit:"Adet",stock:78,dataDate:"2026-06-11",leadTime:30,packSize:12,monthlyDemand:62,demandDeviation:12.2,safetyStock:21,criticalLevel:83,months:[62,62,62],suggestedPurchase:132,status:"critical",trackingLevel:"NORMAL",warnings:[]},
-        {code:"URN-003",name:"Premium Ürün",category:"Ana Grup",unit:"Adet",stock:118,dataDate:"2026-06-11",leadTime:14,packSize:6,monthlyDemand:42,demandDeviation:5.1,safetyStock:6,criticalLevel:26,months:[42,42,42],suggestedPurchase:18,status:"normal",trackingLevel:"NORMAL",warnings:[]}
+        {code:"URN-001",name:"Klasik Ürün",category:"Ana Grup",unit:"Adet",stock:42,dataDate:"2026-06-11",leadTime:20,packSize:10,monthlyDemand:58,demandDeviation:9.4,safetyStock:13,criticalLevel:52,months:[58,58,58],threeMonthForecast:174,suggestedPurchase:150,status:"critical",businessStatus:"ACIL_ALIM",recent12Sales:696,stockCoverageMonths:0.72,priorityScore:1420,trackingLevel:"ONCELIKLI",warnings:[]},
+        {code:"URN-002",name:"Mevsimlik Ürün",category:"Sezon",unit:"Adet",stock:78,dataDate:"2026-06-11",leadTime:30,packSize:12,monthlyDemand:62,demandDeviation:12.2,safetyStock:21,criticalLevel:83,months:[62,62,62],threeMonthForecast:186,suggestedPurchase:132,status:"critical",businessStatus:"YAKINDA_ALIM",recent12Sales:744,stockCoverageMonths:1.26,priorityScore:980,trackingLevel:"NORMAL",warnings:[]},
+        {code:"URN-003",name:"Premium Ürün",category:"Ana Grup",unit:"Adet",stock:118,dataDate:"2026-06-11",leadTime:14,packSize:6,monthlyDemand:42,demandDeviation:5.1,safetyStock:6,criticalLevel:26,months:[42,42,42],threeMonthForecast:126,suggestedPurchase:18,status:"normal",businessStatus:"NORMAL",recent12Sales:504,stockCoverageMonths:2.81,priorityScore:520,trackingLevel:"NORMAL",warnings:[]}
       ],
       trackingProducts:[
         {code:"URN-001",name:"Klasik Ürün",trackingLevel:"ONCELIKLI",active:true,status:"critical"},
@@ -297,7 +297,7 @@
         {code:"URN-003",name:"Premium Ürün",trackingLevel:"NORMAL",active:true,status:"normal"},
         {code:"URN-004",name:"Yeni Ürün",trackingLevel:"TAKIP_ETME",active:true,status:"veri_yetersiz"}
       ],
-      summary:{totalProducts:3,priorityCount:1,criticalCount:2,lowCount:0,insufficientCount:0,purchaseTotal:300},
+      summary:{totalProducts:3,priorityCount:1,criticalCount:1,lowCount:1,manualCount:0,dormantCount:0,insufficientCount:0,purchaseTotal:300},
       freshness:{latestDate:"2026-06-11",missing:false,inconsistent:false,stale:false,message:"Zirve verisi güncel."},
       calculatedAt:"2026-06-11 09:00:00"
     };
@@ -312,11 +312,11 @@
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
     const fmt = value => new Intl.NumberFormat("tr-TR",{maximumFractionDigits:2}).format(Number(value)||0);
-    const statusText = {normal:"Normal",low:"Düşük",critical:"Kritik",veri_yetersiz:"Yetersiz veri"};
+    const statusText = {normal:"Normal",low:"Düşük",critical:"Kritik",manuel_takip:"Manuel takip",hareketsiz:"Hareketsiz",veri_yetersiz:"Yetersiz veri",ACIL_ALIM:"Acil alım",YAKINDA_ALIM:"Yakında alım",NORMAL:"Normal",MANUEL_TAKIP:"Manuel takip",HAREKETSIZ:"Hareketsiz",YETERSIZ_VERI:"Yetersiz veri"};
     const trackingText = {ONCELIKLI:"Öncelikli",NORMAL:"Normal",TAKIP_ETME:"Takip etme"};
     const titles = {
-      dashboard:["Genel Bakış","Kritik stoklar ve üç aylık alım ihtiyacı."],
-      analysis:["Stok Analizi","Otomatik kritik eşikler ve güvenlik stokları."],
+      dashboard:["Genel Bakış","Hareketli ürünlerde gerçek stok riski."],
+      analysis:["Stok Analizi","Yakın dönem hareket, stok yeterliliği ve alım önerisi."],
       forecast:["3 Aylık Alım Planı","Önümüzdeki üç ay için önerilen ürün adetleri."],
       tracking:["Ürün Takibi","Takip kapsamını ve ürün önceliklerini yönetin."],
       settings:["Veri ve Bağlantı","Zirve aktarımı ve Apps Script bağlantısı."]
@@ -351,13 +351,13 @@
       $("freshnessNotice").textContent = `${freshness.message || "Veri tarihi bilinmiyor."} Son veri: ${freshness.latestDate || "—"} · Hesaplama: ${state.data.calculatedAt || "—"}`;
       $("freshnessNotice").classList.toggle("warning",!!(freshness.missing||freshness.inconsistent||freshness.stale));
 
-      const critical = products.filter(product => product.status==="critical");
+      const critical = products.filter(product => product.businessStatus==="ACIL_ALIM");
       $("criticalRows").innerHTML = critical.map(product =>
-        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small>${product.trackingLevel==="ONCELIKLI"?`<br><span class="priority-label">ÖNCELİKLİ</span>`:""}</td><td>${fmt(product.stock)}</td><td>${fmt(product.criticalLevel)}</td><td>${fmt((product.months||[]).reduce((a,b)=>a+Number(b||0),0))}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
-      ).join("") || emptyRow(5,"Kritik ürün bulunmuyor.");
+        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td><strong>${esc(product.name)}</strong><br><small class="sub">${esc(product.code)}</small>${product.trackingLevel==="ONCELIKLI"?`<br><span class="priority-label">ÖNCELİKLİ</span>`:""}</td><td>${fmt(product.stock)}</td><td>${thresholdText(product.stockCoverageMonths)}</td><td>${fmt(product.recent12Sales)}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td></tr>`
+      ).join("") || emptyRow(5,"Acil alım ürünü bulunmuyor.");
       $("alerts").innerHTML = critical.map(product =>
-        `<div class="alert"><strong>${esc(product.name)}</strong><small>Stok ${fmt(product.stock)} · Kritik eşik ${fmt(product.criticalLevel)} · Alım ${fmt(product.suggestedPurchase)}</small></div>`
-      ).join("") || `<p class="empty">Kritik stok uyarısı yok.</p>`;
+        `<div class="alert"><strong>${esc(product.name)}</strong><small>Stok ${fmt(product.stock)} · ${thresholdText(product.stockCoverageMonths)} ay yeter · Alım ${fmt(product.suggestedPurchase)}</small></div>`
+      ).join("") || `<p class="empty">Acil alım uyarısı yok.</p>`;
       renderAnalysis();
       renderForecast();
       renderTracking();
@@ -371,20 +371,21 @@
       const tracking = $("analysisTracking").value;
       return (state.data.products||[]).filter(product =>
         (!query || (product.code + " " + product.name).toLocaleLowerCase("tr").includes(query)) &&
-        (!status || product.status===status) &&
+        (!status || product.businessStatus===status) &&
         (!tracking || product.trackingLevel===tracking)
       );
     }
     function renderAnalysis() {
       const rows = visibleAnalysisProducts();
       $("analysisRows").innerHTML = rows.map(product =>
-        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${esc(trackingText[product.trackingLevel]||"Normal")}</td><td>${fmt(product.stock)}</td><td>${esc(demandClassText[product.demandClass]||product.demandClass||"-")}</td><td>${fmt(product.monthlyDemand)}</td><td>${fmt(product.demandDeviation)}</td><td>${fmt(product.safetyStock)}</td><td>${thresholdText(product.criticalLevel)}</td><td>${esc(product.lastSaleDate||"-")}</td><td>${badge(product.status)}</td></tr>`
+        `<tr class="${product.trackingLevel==="ONCELIKLI"?"priority-row":""}"><td>${esc(product.code)}</td><td><strong>${esc(product.name)}</strong>${(product.warnings||[]).length?`<br><small class="sub">${esc(product.warnings.join(" "))}</small>`:""}</td><td>${esc(trackingText[product.trackingLevel]||"Normal")}</td><td>${fmt(product.stock)}</td><td>${esc(product.lastSaleDate||"-")}</td><td>${fmt(product.recent12Sales)}</td><td>${thresholdText(product.stockCoverageMonths)}</td><td>${fmt(product.threeMonthForecast ?? (product.months||[]).reduce((a,b)=>a+Number(b||0),0))}</td><td><strong>${fmt(product.suggestedPurchase)}</strong></td><td>${badge(product.businessStatus||product.status)}</td><td>${esc(product.forecastExplanation||demandClassText[product.demandClass]||"-")}</td></tr>`
       ).join("") || emptyRow(11);
     }
     function renderForecast() {
       const rank = value => value==="ONCELIKLI"?0:1;
       const rows = (state.data.products||[]).slice().sort((a,b)=>
         rank(a.trackingLevel)-rank(b.trackingLevel) ||
+        Number(b.priorityScore||0)-Number(a.priorityScore||0) ||
         Number(b.suggestedPurchase)-Number(a.suggestedPurchase)
       );
       $("forecastRows").innerHTML = rows.map(product =>

@@ -23,7 +23,8 @@ const HEADERS = Object.freeze({
     'Aylik_Talep', 'Talep_Sapmasi', 'Guvenlik_Stogu', 'Kritik_Esik',
     'Ay_1_Tahmin', 'Ay_2_Tahmin', 'Ay_3_Tahmin', 'Onerilen_Alim',
     'Durum', 'Veri_Tarihi', 'Tahmin_Sinifi', 'Son_Satis_Tarihi',
-    'Pozitif_Satis_Ayi', 'Son_Satistan_Beri_Ay', 'Tahmin_Aciklamasi'
+    'Pozitif_Satis_Ayi', 'Son_Satistan_Beri_Ay', 'Tahmin_Aciklamasi',
+    'Is_Durumu', 'Son_12_Ay_Satis', 'Stok_Kac_Ay_Yeter', 'Oncelik_Puani'
   ],
   Ayarlar: ['Ayar', 'Deger', 'Aciklama']
 });
@@ -143,8 +144,8 @@ function calculateAnalysis_(request) {
       priorityCount: products.filter(function(p) {
         return p.trackingLevel === 'ONCELIKLI';
       }).length,
-      criticalCount: products.filter(function(p) { return p.status === 'critical'; }).length,
-      lowCount: products.filter(function(p) { return p.status === 'low'; }).length,
+      criticalCount: products.filter(function(p) { return p.businessStatus === 'ACIL_ALIM'; }).length,
+      lowCount: products.filter(function(p) { return p.businessStatus === 'YAKINDA_ALIM'; }).length,
       manualCount: products.filter(function(p) { return p.status === 'manuel_takip'; }).length,
       dormantCount: products.filter(function(p) { return p.status === 'hareketsiz'; }).length,
       insufficientCount: products.filter(function(p) { return p.status === 'veri_yetersiz'; }).length,
@@ -165,6 +166,8 @@ function analyzeProduct_(stock, history, settings, request) {
   metrics.availableMonths = request && request.availableMonths != null ?
     number_(request.availableMonths) : 36;
   metrics.lag12Correlation = lag12Correlation_(series);
+  metrics.recent12Sales = sumQuantities_(series.slice(-12));
+  metrics.recent12PositiveMonths = positiveMonthCount_(series.slice(-12));
   const demandClass = classifyDemand_(metrics);
   const forecast = forecastDemand_(demandClass, series, startMonth);
   const automatic = ['HAREKETSIZ', 'MANUEL_TAKIP', 'YETERSIZ_VERI'].indexOf(demandClass) === -1;
@@ -183,14 +186,31 @@ function analyzeProduct_(stock, history, settings, request) {
     modelThreshold;
   const status = stockStatus_(number_(stock.stock), criticalLevel, demandClass);
   const months = forecast.months;
+  const threeMonthForecast = months.reduce(function(sum, value) {
+    return sum + number_(value);
+  }, 0);
+  const recentMonthlyDemand = metrics.recent12Sales > 0 ?
+    metrics.recent12Sales / 12 :
+    0;
+  const stockCoverageMonths = recentMonthlyDemand > 0 ?
+    number_(stock.stock) / recentMonthlyDemand :
+    null;
   const statisticalShortage = automatic ?
-    months.reduce(function(sum, value) { return sum + number_(value); }, 0) +
-    safetyStock - number_(stock.stock) : 0;
+    threeMonthForecast + safetyStock - number_(stock.stock) : 0;
   const manualShortage = manualMinimum > 0 ? manualMinimum - number_(stock.stock) : 0;
   const suggestedPurchase = roundToPack_(
     Math.max(0, statisticalShortage, manualShortage),
     settings.packSize
   );
+  const businessStatus = businessStatus_(demandClass, stockCoverageMonths, status);
+  const priorityScore = priorityScore_({
+    trackingLevel: trackingLevel,
+    businessStatus: businessStatus,
+    suggestedPurchase: suggestedPurchase,
+    stockCoverageMonths: stockCoverageMonths,
+    recent12PositiveMonths: metrics.recent12PositiveMonths,
+    recent12Sales: metrics.recent12Sales
+  });
   const warnings = [];
   if (settings.missing) warnings.push('Urun ayari bulunamadi; 30 gun ve paket 1 kullanildi.');
   if (demandClass === 'YETERSIZ_VERI') warnings.push('Aylik satis gecmisi yetersiz.');
@@ -216,10 +236,16 @@ function analyzeProduct_(stock, history, settings, request) {
     months: months.map(function(value) { return round_(value, 2); }),
     suggestedPurchase: suggestedPurchase,
     status: status,
+    businessStatus: businessStatus,
+    priorityScore: round_(priorityScore, 2),
     demandClass: demandClass,
     lastSaleDate: metrics.lastSaleDate,
     nonZeroMonthCount: metrics.nonZeroMonthCount,
     monthsSinceLastSale: metrics.monthsSinceLastSale,
+    recent12Sales: round_(metrics.recent12Sales, 2),
+    recent12PositiveMonths: metrics.recent12PositiveMonths,
+    stockCoverageMonths: stockCoverageMonths == null ? null : round_(stockCoverageMonths, 2),
+    threeMonthForecast: round_(threeMonthForecast, 2),
     forecastExplanation: explanation,
     warnings: warnings
   };
@@ -295,7 +321,9 @@ function trackingRank_(level) {
 }
 
 function compareProductPriority_(a, b) {
-  return trackingRank_(a.trackingLevel) - trackingRank_(b.trackingLevel) ||
+  return businessStatusRank_(a.businessStatus) - businessStatusRank_(b.businessStatus) ||
+    trackingRank_(a.trackingLevel) - trackingRank_(b.trackingLevel) ||
+    number_(b.priorityScore) - number_(a.priorityScore) ||
     number_(b.suggestedPurchase) - number_(a.suggestedPurchase) ||
     clean_(a.name).localeCompare(clean_(b.name), 'tr');
 }
@@ -418,6 +446,18 @@ function calculateDemandMetrics_(series) {
   };
 }
 
+function sumQuantities_(rows) {
+  return (rows || []).reduce(function(sum, row) {
+    return sum + number_(row.quantity);
+  }, 0);
+}
+
+function positiveMonthCount_(rows) {
+  return (rows || []).filter(function(row) {
+    return number_(row.quantity) > 0;
+  }).length;
+}
+
 function availableHistoryMonths_(salesByProduct, startMonth) {
   const start = parseYearMonth_(startMonth);
   let earliest = null;
@@ -470,6 +510,7 @@ function classifyDemand_(metrics) {
   if (metrics.monthsSinceLastSale == null || number_(metrics.monthsSinceLastSale) >= 24) {
     return 'HAREKETSIZ';
   }
+  if (metrics.recent12Sales != null && number_(metrics.recent12Sales) <= 0) return 'MANUEL_TAKIP';
   if (number_(metrics.nonZeroMonthCount) <= 2) return 'MANUEL_TAKIP';
   if (number_(metrics.availableMonths) >= 24 &&
       metrics.lag12Correlation != null &&
@@ -480,6 +521,46 @@ function classifyDemand_(metrics) {
     return number_(metrics.cv2) < 0.49 ? 'DUZENLI' : 'DEGISKEN';
   }
   return number_(metrics.cv2) < 0.49 ? 'KESIKLI' : 'YIGINSAL';
+}
+
+function businessStatus_(demandClass, stockCoverageMonths, technicalStatus) {
+  if (demandClass === 'YETERSIZ_VERI') return 'YETERSIZ_VERI';
+  if (demandClass === 'HAREKETSIZ') return 'HAREKETSIZ';
+  if (demandClass === 'MANUEL_TAKIP') return 'MANUEL_TAKIP';
+  if (stockCoverageMonths == null) return technicalStatus === 'critical' ? 'ACIL_ALIM' : 'NORMAL';
+  if (stockCoverageMonths <= 1) return 'ACIL_ALIM';
+  if (stockCoverageMonths <= 3) return 'YAKINDA_ALIM';
+  return 'NORMAL';
+}
+
+function businessStatusRank_(status) {
+  const ranks = {
+    ACIL_ALIM: 0,
+    YAKINDA_ALIM: 1,
+    NORMAL: 2,
+    MANUEL_TAKIP: 3,
+    HAREKETSIZ: 4,
+    YETERSIZ_VERI: 5
+  };
+  return ranks[status] == null ? 6 : ranks[status];
+}
+
+function priorityScore_(product) {
+  const statusWeight = {
+    ACIL_ALIM: 1000,
+    YAKINDA_ALIM: 700,
+    NORMAL: 200,
+    MANUEL_TAKIP: 80,
+    HAREKETSIZ: 20,
+    YETERSIZ_VERI: 10
+  }[product.businessStatus] || 0;
+  const trackingBoost = normalizeTrackingLevel_(product.trackingLevel) === 'ONCELIKLI' ? 150 : 0;
+  const coverage = product.stockCoverageMonths == null ? 0 :
+    Math.max(0, 120 - number_(product.stockCoverageMonths) * 20);
+  const continuity = number_(product.recent12PositiveMonths) * 8;
+  const movement = Math.min(120, number_(product.recent12Sales));
+  const shortage = Math.min(200, number_(product.suggestedPurchase) * 2);
+  return statusWeight + trackingBoost + coverage + continuity + movement + shortage;
 }
 
 function seasonalForecast_(series, startMonth, horizon) {
@@ -692,7 +773,11 @@ function writeAnalysis_(analysis) {
       product.lastSaleDate,
       product.nonZeroMonthCount,
       product.monthsSinceLastSale,
-      product.forecastExplanation
+      product.forecastExplanation,
+      product.businessStatus,
+      product.recent12Sales,
+      product.stockCoverageMonths == null ? '' : product.stockCoverageMonths,
+      product.priorityScore
     ];
   });
   if (rows.length) {

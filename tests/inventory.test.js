@@ -211,6 +211,69 @@ test('sparse product has no false critical threshold or purchase recommendation'
   assert.equal(result.lastSaleDate, '2024-06');
 });
 
+test('product without latest 12 month movement is manual follow-up despite old spikes', () => {
+  const app = loadCode();
+  const history = [
+    {year: 2023, month: 7, quantity: 1, date: new Date(2023, 6, 1)},
+    {year: 2024, month: 2, quantity: 1, date: new Date(2024, 1, 1)},
+    {year: 2024, month: 10, quantity: 2, date: new Date(2024, 9, 1)},
+    {year: 2025, month: 2, quantity: 7, date: new Date(2025, 1, 1)}
+  ];
+
+  const result = app.analyzeProduct_(
+    {code: 'R901113598', name: '041149035605000-VSBN-08A-05', stock: 1, dataDate: '2026-07-03'},
+    history,
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-07', availableMonths: 40}
+  );
+
+  assert.equal(result.demandClass, 'MANUEL_TAKIP');
+  assert.equal(result.status, 'manuel_takip');
+  assert.equal(result.businessStatus, 'MANUEL_TAKIP');
+  assert.equal(result.recent12Sales, 0);
+  assert.equal(result.stockCoverageMonths, null);
+  assert.equal(result.suggestedPurchase, 0);
+  assert.equal(result.lastSaleDate, '2025-02');
+});
+
+test('moving products are classified by stock coverage bands', () => {
+  const app = loadCode();
+  const movingHistory = Array.from({length: 12}, (_, index) => {
+    const date = new Date(2025, 6 + index, 1);
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      quantity: 10,
+      date
+    };
+  });
+
+  const urgent = app.analyzeProduct_(
+    {code: 'FAST', name: 'Fast moving', stock: 8, dataDate: '2026-07-03'},
+    movingHistory,
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-07', availableMonths: 36}
+  );
+  const upcoming = app.analyzeProduct_(
+    {code: 'MID', name: 'Medium moving', stock: 20, dataDate: '2026-07-03'},
+    movingHistory,
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-07', availableMonths: 36}
+  );
+  const normal = app.analyzeProduct_(
+    {code: 'OK', name: 'Covered moving', stock: 45, dataDate: '2026-07-03'},
+    movingHistory,
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-07', availableMonths: 36}
+  );
+
+  assert.equal(urgent.businessStatus, 'ACIL_ALIM');
+  assert.equal(upcoming.businessStatus, 'YAKINDA_ALIM');
+  assert.equal(normal.businessStatus, 'NORMAL');
+  assert.equal(urgent.recent12Sales, 120);
+  assert.equal(urgent.stockCoverageMonths, 0.8);
+});
+
 test('manual minimum stock creates threshold and package-rounded shortage', () => {
   const app = loadCode();
   const result = app.analyzeProduct_(
@@ -357,7 +420,7 @@ test('analysis writer replaces rows and writes all extended columns', () => {
   const calls = [];
   const sheet = {
     getLastRow: () => 4,
-    getLastColumn: () => 19,
+    getLastColumn: () => 23,
     getRange(row, column, rows, columns) {
       return {
         clearContent() {
@@ -383,11 +446,11 @@ test('analysis writer replaces rows and writes all extended columns', () => {
   });
 
   assert.deepEqual(calls[0], {
-    type: 'clear', row: 2, column: 1, rows: 3, columns: 19
+    type: 'clear', row: 2, column: 1, rows: 3, columns: 23
   });
   assert.equal(calls[1].type, 'write');
   assert.equal(calls[1].values.length, 1);
-  assert.equal(calls[1].values[0].length, 19);
+  assert.equal(calls[1].values[0].length, 23);
   assert.equal(calls[1].values[0][1], 'URN-001');
 });
 
@@ -395,7 +458,7 @@ test('analysis writer serializes nullable threshold and forecast explanation fie
   const calls = [];
   const sheet = {
     getLastRow: () => 2,
-    getLastColumn: () => 19,
+    getLastColumn: () => 23,
     getRange(row, column, rows, columns) {
       return {
         clearContent() {
@@ -418,14 +481,17 @@ test('analysis writer serializes nullable threshold and forecast explanation fie
       months: [0, 0, 0], suggestedPurchase: 0, status: 'manuel_takip',
       dataDate: '2026-06-10', demandClass: 'MANUEL_TAKIP',
       lastSaleDate: '2024-06', nonZeroMonthCount: 1,
-      monthsSinceLastSale: 23, forecastExplanation: 'Cok seyrek.'
+      monthsSinceLastSale: 23, forecastExplanation: 'Cok seyrek.',
+      businessStatus: 'MANUEL_TAKIP', recent12Sales: 0,
+      stockCoverageMonths: null, priorityScore: 80
     }]
   });
 
-  assert.equal(calls[1].values[0].length, 19);
+  assert.equal(calls[1].values[0].length, 23);
   assert.equal(calls[1].values[0][7], '');
   assert.deepEqual(Array.from(calls[1].values[0].slice(14)), [
-    'MANUEL_TAKIP', '2024-06', 1, 23, 'Cok seyrek.'
+    'MANUEL_TAKIP', '2024-06', 1, 23, 'Cok seyrek.',
+    'MANUEL_TAKIP', 0, '', 80
   ]);
 });
 
