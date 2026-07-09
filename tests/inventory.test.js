@@ -102,6 +102,42 @@ test('history coverage counts complete source months without confusing zero sale
   assert.equal(app.availableHistoryMonths_(sales, '2026-06'), 8);
 });
 
+test('analysis window starts after the latest sales month when no start month is requested', () => {
+  const app = loadCode({
+    Utilities: {
+      formatDate(date, timezone, pattern) {
+        if (pattern === 'yyyy-MM-dd HH:mm:ss') return '2026-07-09 12:00:00';
+        if (pattern === 'yyyy-MM-dd') return '2026-07-09';
+        return '2026-07';
+      }
+    }
+  });
+
+  app.readCurrentStock_ = () => [
+    {code: 'R900561288', name: '4WE 6 J6X/EG24N9K4', stock: 180, dataDate: '2026-07-03'}
+  ];
+  app.readMonthlySales_ = () => ({
+    R900561288: [
+      {year: 2025, month: 1, quantity: 19, date: new Date(2025, 0, 1)},
+      {year: 2025, month: 2, quantity: 13, date: new Date(2025, 1, 1)},
+      {year: 2025, month: 3, quantity: 8, date: new Date(2025, 2, 1)},
+      {year: 2025, month: 4, quantity: 10, date: new Date(2025, 3, 1)}
+    ]
+  });
+  app.readProductSettings_ = () => ({
+    R900561288: {leadTime: 30, packSize: 1, active: true, trackingLevel: 'NORMAL', minimumStock: 0}
+  });
+
+  const result = app.calculateAnalysis_({availableMonths: 36});
+  const product = result.products[0];
+
+  assert.equal(app.analysisStartMonthFromSales_(app.readMonthlySales_(), '2026-07'), '2025-05');
+  assert.equal(product.lastSaleDate, '2025-04');
+  assert.equal(product.recent12Sales, 50);
+  assert.notEqual(product.demandClass, 'MANUEL_TAKIP');
+  assert.equal(product.businessStatus, 'NORMAL');
+});
+
 test('demand classification prioritizes insufficient dormant and manual rules', () => {
   const app = loadCode();
   assert.equal(app.classifyDemand_({availableMonths: 11}), 'YETERSIZ_VERI');

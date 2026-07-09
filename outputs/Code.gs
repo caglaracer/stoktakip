@@ -103,8 +103,13 @@ function calculateAnalysis_(request) {
   const settings = readProductSettings_();
   const analysisRequest = request || {};
   const startMonth = analysisRequest.startMonth ||
-    Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').slice(0, 7);
-  const availableMonths = availableHistoryMonths_(sales, startMonth);
+    analysisStartMonthFromSales_(
+      sales,
+      Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').slice(0, 7)
+    );
+  const availableMonths = analysisRequest.availableMonths != null ?
+    number_(analysisRequest.availableMonths) :
+    availableHistoryMonths_(sales, startMonth);
   const allProducts = stocks.map(function(stock) {
     const productSettings = settings[stock.code] || {
       leadTime: 30,
@@ -470,6 +475,24 @@ function availableHistoryMonths_(salesByProduct, startMonth) {
   if (earliest == null) return 0;
   const startOrdinal = start.year * 12 + start.month - 1;
   return Math.max(0, Math.min(36, startOrdinal - earliest));
+}
+
+function analysisStartMonthFromSales_(salesByProduct, fallbackStartMonth) {
+  let latest = null;
+  Object.keys(salesByProduct || {}).forEach(function(code) {
+    (salesByProduct[code] || []).forEach(function(row) {
+      const year = number_(row.year);
+      const month = number_(row.month);
+      if (!year || month < 1 || month > 12) return;
+      const ordinal = year * 12 + month - 1;
+      if (latest == null || ordinal > latest) latest = ordinal;
+    });
+  });
+  if (latest == null) return fallbackStartMonth;
+  const latestYear = Math.floor(latest / 12);
+  const latestMonth = latest % 12 + 1;
+  const next = shiftMonth_(latestYear, latestMonth, 1);
+  return next.year + '-' + String(next.month).padStart(2, '0');
 }
 
 function correlation_(left, right) {
