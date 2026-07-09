@@ -203,11 +203,12 @@ function analyzeProduct_(stock, history, settings, request) {
   const statisticalShortage = automatic ?
     threeMonthForecast + safetyStock - number_(stock.stock) : 0;
   const manualShortage = manualMinimum > 0 ? manualMinimum - number_(stock.stock) : 0;
+  const businessStatus = businessStatus_(demandClass, stockCoverageMonths, status);
+  const automaticPurchaseAllowed = ['ACIL_ALIM', 'YAKINDA_ALIM'].indexOf(businessStatus) >= 0;
   const suggestedPurchase = roundToPack_(
-    Math.max(0, statisticalShortage, manualShortage),
+    Math.max(0, automaticPurchaseAllowed ? statisticalShortage : 0, manualShortage),
     settings.packSize
   );
-  const businessStatus = businessStatus_(demandClass, stockCoverageMonths, status);
   const priorityScore = priorityScore_({
     trackingLevel: trackingLevel,
     businessStatus: businessStatus,

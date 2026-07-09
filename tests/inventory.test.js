@@ -310,6 +310,29 @@ test('moving products are classified by stock coverage bands', () => {
   assert.equal(urgent.stockCoverageMonths, 0.8);
 });
 
+test('normal coverage suppresses automatic purchase for sparse recent demand', () => {
+  const app = loadCode();
+  const history = [
+    {year: 2023, month: 7, quantity: 1, date: new Date(2023, 6, 1)},
+    {year: 2024, month: 2, quantity: 1, date: new Date(2024, 1, 1)},
+    {year: 2024, month: 10, quantity: 2, date: new Date(2024, 9, 1)},
+    {year: 2025, month: 2, quantity: 7, date: new Date(2025, 1, 1)},
+    {year: 2026, month: 2, quantity: 1, date: new Date(2026, 1, 1)}
+  ];
+
+  const result = app.analyzeProduct_(
+    {code: 'R901113598', name: '041149035605000-VSBN-08A-05', stock: 1, dataDate: '2026-07-03'},
+    history,
+    {leadTime: 30, packSize: 1, minimumStock: 0, active: true, missing: false},
+    {startMonth: '2026-06', availableMonths: 40}
+  );
+
+  assert.equal(result.recent12Sales, 1);
+  assert.equal(result.stockCoverageMonths, 12);
+  assert.equal(result.businessStatus, 'NORMAL');
+  assert.equal(result.suggestedPurchase, 0);
+});
+
 test('manual minimum stock creates threshold and package-rounded shortage', () => {
   const app = loadCode();
   const result = app.analyzeProduct_(
