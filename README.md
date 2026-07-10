@@ -15,6 +15,7 @@ Uygulama stok veya sipariş kaydı oluşturmaz. Amacı:
 - `index.html`: GitHub Pages raporlama paneli
 - `outputs/Code.gs`: Google Apps Script analiz ve e-posta kodu
 - `outputs/README.md`: Ayrıntılı kurulum ve günlük kullanım kılavuzu
+- `docs/STOK_PUSULASI_KULLANIM_VE_ANALIZ_REHBERI.md`: Uygulamanın arka plan sistemi, veri akışı ve analiz modelleri
 - `tests/inventory.test.js`: Analiz, e-posta ve arayüz regresyon testleri
 
 ## Hesaplama
@@ -30,4 +31,5 @@ Uygulama stok veya sipariş kaydı oluşturmaz. Amacı:
 node --test tests\inventory.test.js
 ```
 
-Kurulum için [ayrıntılı kılavuzu](outputs/README.md) izleyin.
+Kurulum için [ayrıntılı kılavuzu](outputs/README.md), uygulamanın çalışma
+mantığı için [kullanım ve analiz rehberini](docs/STOK_PUSULASI_KULLANIM_VE_ANALIZ_REHBERI.md) izleyin.
