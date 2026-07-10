@@ -433,13 +433,14 @@
       const response = await fetch(url);
       return response.json();
     }
-    async function postApi(payload) {
+    async function postApi(payload, options={}) {
       if (!state.apiUrl) throw new Error("API adresi tanımlı değil.");
-      if (!state.accessToken) throw new Error("Yazma erişim anahtarı tanımlı değil.");
+      const requireToken = options.requireToken !== false;
+      if (requireToken && !state.accessToken) throw new Error("Yazma erişim anahtarı tanımlı değil.");
       const response = await fetch(state.apiUrl,{
         method:"POST",
         headers:{"Content-Type":"text/plain;charset=utf-8"},
-        body:JSON.stringify({...payload,token:state.accessToken})
+        body:JSON.stringify(requireToken ? {...payload,token:state.accessToken} : payload)
       });
       return response.json();
     }
@@ -478,7 +479,7 @@
       }
       $("downloadAnalysis").disabled = true;
       try {
-        const result = await postApi({action:"exportAnalysis",codes:products.map(product=>product.code)});
+        const result = await postApi({action:"exportAnalysis",codes:products.map(product=>product.code)},{requireToken:false});
         if (!result.ok) throw new Error(result.error||"Excel raporu olusturulamadi.");
         const link = document.createElement("a");
         link.href = URL.createObjectURL(base64Blob(result.data.base64,result.data.mimeType));

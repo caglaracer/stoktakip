@@ -1131,7 +1131,6 @@ function requireAccessToken_(token) {
 }
 
 function handleAnalysisExport_(payload) {
-  requireAccessToken_(payload.token);
   if (!Array.isArray(payload.codes) || !payload.codes.length) {
     throw new Error('Excel icin urun secimi bulunamadi.');
   }

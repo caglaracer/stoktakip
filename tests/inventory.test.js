@@ -689,12 +689,8 @@ test('tracking update rejects invalid token and writes valid batch updates', () 
   ]);
 });
 
-test('analysis export requires token and preserves requested code order', () => {
-  const app = loadCode({
-    PropertiesService: {
-      getScriptProperties: () => ({getProperty: () => 'secret'})
-    }
-  });
+test('analysis export preserves requested code order without write token', () => {
+  const app = loadCode();
   app.getDashboardData_ = () => ({
     calculatedAt: '2026-06-12 10:00:00',
     products: [
@@ -708,11 +704,8 @@ test('analysis export requires token and preserves requested code order', () => 
     codes: products.map(product => product.code)
   });
 
-  assert.throws(() => app.handleAnalysisExport_({
-    token: 'wrong', codes: ['B']
-  }), /erisim anahtari/i);
   const result = app.handleAnalysisExport_({
-    token: 'secret', codes: ['B', 'A', 'B', 'UNKNOWN']
+    codes: ['B', 'A', 'B', 'UNKNOWN']
   });
   assert.deepEqual(Array.from(result.codes), ['B', 'A']);
 });
@@ -886,6 +879,7 @@ test('browser copies expose tracking management and protected POST updates', () 
     assert.match(source, /method:\s*["']POST["']/i);
     assert.match(source, /updateTrackingLevels/);
     assert.match(source, /exportAnalysis/);
+    assert.match(source, /postApi\(\{action:"exportAnalysis"/);
     assert.match(source, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
     assert.match(source, /manuel_takip/);
     assert.match(source, /hareketsiz/);
